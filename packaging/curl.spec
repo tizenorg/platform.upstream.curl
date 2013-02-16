@@ -1,11 +1,9 @@
 Name:       curl
 Summary:    A utility for getting files from remote servers (FTP, HTTP, and others)
 Version:    7.21.3
-Release:    1
+Release:    0
 Group:      Applications/Internet
 License:    MIT
-#URL:        http://curl.haxx.se/
-#Source0:    http://curl.haxx.se/download/%{name}-%{version}.tar.bz2
 Source0:    %{name}-%{version}.tar.bz2
 
 BuildRequires:  pkgconfig(openssl)
@@ -97,6 +95,7 @@ rm -rf ${RPM_BUILD_ROOT}/usr/share/man
 %postun -n libcurl -p /sbin/ldconfig
 
 %files
+%license COPYING
 %{_bindir}/curl
 
 %files -n libcurl
