@@ -5,6 +5,7 @@ Release:    0
 Group:      Applications/Internet
 License:    MIT
 Source0:    %{name}-%{version}.tar.bz2
+Source1001: 	curl.manifest
 
 BuildRequires:  pkgconfig(openssl)
 BuildRequires:  pkgconfig(libidn)
@@ -50,6 +51,7 @@ use cURL's capabilities internally.
 
 %prep
 %setup -q
+cp %{SOURCE1001} .
 
 
 %build
@@ -95,13 +97,16 @@ rm -rf ${RPM_BUILD_ROOT}/usr/share/man
 %postun -n libcurl -p /sbin/ldconfig
 
 %files
+%manifest %{name}.manifest
 %license COPYING
 %{_bindir}/curl
 
 %files -n libcurl
+%manifest %{name}.manifest
 %{_libdir}/libcurl.so.*
 
 %files -n libcurl-devel
+%manifest %{name}.manifest
 %{_bindir}/curl-config*
 %{_includedir}/curl
 %{_libdir}/*.so
