@@ -1,5 +1,5 @@
 Name:           curl
-Version:        7.32.0
+Version:        7.37.1
 Release:        0
 License:        MIT
 Summary:        A utility for getting files from remote servers (FTP, HTTP, and others)
@@ -72,10 +72,10 @@ sed -i \
 -e 's|^hardcode_libdir_flag_spec=.*|hardcode_libdir_flag_spec=""|g' \
 -e 's|^runpath_var=LD_RUN_PATH|runpath_var=DIE_RPATH_DIE|g' libtool
 
-make %{?_smp_mflags}
+%__make %{?_smp_mflags}
 
 %install
-make DESTDIR=%{buildroot} INSTALL="install -p" install
+%make_install INSTALL="install -p"
 
 rm -f %{buildroot}%{_libdir}/libcurl.la
 install -d %{buildroot}/%{_datadir}/aclocal
@@ -106,3 +106,4 @@ rm -rf %{buildroot}%{_datadir}/man
 %{_libdir}/*.so
 %{_libdir}/pkgconfig/*.pc
 %{_datadir}/aclocal/libcurl.m4
+
