@@ -1,7 +1,0 @@
-* Wed Sep 4 2013 Patrick McCarty <patrick.mccarty@linux.intel.com> 71d6fee
-- Packaging cleanups (fix RPM group tags, whitespace)
-- Update to 7.32.0 (addresses multiple CVEs)
-
-* Fri Feb 15 2013 Anas Nashif <anas.nashif@intel.com> upstream/7.21.3@96b84bd
-- Add baselibs
-

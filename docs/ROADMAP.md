@@ -1,12 +1,12 @@
 curl the next few years - perhaps
-=======================
+=================================
 
 Roadmap of things Daniel Stenberg and Steve Holme want to work on next. It is
 intended to serve as a guideline for others for information, feedback and
 possible participation.
 
 New stuff - libcurl
-===================
+-------------------
 
 1. http2 test suite
 
@@ -18,37 +18,33 @@ New stuff - libcurl
 
 5. HTTPS to proxy
 
-6. make sure there's an easy handle passed in to curl_formadd(),
-   curl_formget() and curl_formfree() by adding replacement functions and
+6. make sure there's an easy handle passed in to `curl_formadd()`,
+   `curl_formget()` and `curl_formfree()` by adding replacement functions and
    deprecating the old ones to allow custom mallocs and more
 
-7. HTTP Digest authentication via Windows SSPI
-
-8. GSSAPI authentication in the email protocols
-
-9. add support for third-party SASL libraries such as Cyrus SASL - may need to
+7. add support for third-party SASL libraries such as Cyrus SASL - may need to
    move existing native and SSPI based authentication into vsasl folder after
    reworking HTTP and SASL code
 
-10. SASL authentication in LDAP
+8. SASL authentication in LDAP
 
-11. Simplify the SMTP email interface so that programmers don't have to
-    construct the body of an email that contains all the headers, alternative
-    content, images and attachments - maintain raw interface so that
-    programmers that want to do this can
+9. Simplify the SMTP email interface so that programmers don't have to
+   construct the body of an email that contains all the headers, alternative
+   content, images and attachments - maintain raw interface so that
+   programmers that want to do this can
 
-12. Allow the email protocols to return the capabilities before
+10. Allow the email protocols to return the capabilities before
     authenticating. This will allow an application to decide on the best
     authentication mechanism
 
-13. Allow Windows threading model to be replaced by Win32 pthreads port
+11. Allow Windows threading model to be replaced by Win32 pthreads port
 
-14. Implement a dynamic buffer size to allow SFTP to use much larger buffers
+12. Implement a dynamic buffer size to allow SFTP to use much larger buffers
     and possibly allow the size to be customizable by applications. Use less
     memory when handles are not in use?
 
 New stuff - curl
-================
+----------------
 
 1. Embed a language interpreter (lua?). For that middle ground where curl
    isn’t enough and a libcurl binding feels “too much”. Build-time conditional
@@ -58,7 +54,7 @@ New stuff - curl
    don't have to be constructed before calling curl
 
 Improve
-=======
+-------
 
 1. build for windows (considered hard by many users)
 
@@ -69,8 +65,9 @@ Improve
    features/options in the future too
 
 4. docs (considered "bad" by users but how do we make it better?)
-   A - split up curl_easy_setopt.3
-   B - split up curl.1
+
+  - split up `curl_easy_setopt.3`
+  - split up curl.1
 
 5. authentication framework (consider merging HTTP and SASL authentication to
    give one API for protocols to call)
@@ -80,7 +77,7 @@ Improve
    ago
 
 Remove
-======
+------
 
 1. cmake support (nobody maintains it)
 
