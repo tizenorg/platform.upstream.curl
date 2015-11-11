@@ -40,8 +40,6 @@ CERTFILES = \
   Server-localhost-sv.p12 \
   Server-localhost-sv.pem \
   Server-localhost-sv.prm \
-  Server-localhost-sv.pub.der \
-  Server-localhost-sv.pub.pem \
   Server-localhost.nn-sv.crl \
   Server-localhost.nn-sv.crt \
   Server-localhost.nn-sv.csr \
@@ -50,8 +48,6 @@ CERTFILES = \
   Server-localhost.nn-sv.key \
   Server-localhost.nn-sv.pem \
   Server-localhost.nn-sv.prm \
-  Server-localhost.nn-sv.pub.der \
-  Server-localhost.nn-sv.pub.pem \
   Server-localhost0h-sv.crl \
   Server-localhost0h-sv.crt \
   Server-localhost0h-sv.csr \
@@ -60,9 +56,7 @@ CERTFILES = \
   Server-localhost0h-sv.key \
   Server-localhost0h-sv.p12 \
   Server-localhost0h-sv.pem \
-  Server-localhost0h-sv.prm \
-  Server-localhost0h-sv.pub.der \
-  Server-localhost0h-sv.pub.pem
+  Server-localhost0h-sv.prm
 
 SRPFILES = \
   srp-verifier-conf \

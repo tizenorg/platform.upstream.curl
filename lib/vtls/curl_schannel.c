@@ -127,7 +127,7 @@ schannel_connect_step1(struct connectdata *conn, int sockindex)
         conn->host.name, conn->remote_port);
 
   /* check for an existing re-usable credential handle */
-  if(!Curl_ssl_getsessionid(conn, (void **)&old_cred, NULL)) {
+  if(!Curl_ssl_getsessionid(conn, (void**)&old_cred, NULL)) {
     connssl->cred = old_cred;
     infof(data, "schannel: re-using existing credential handle\n");
   }
@@ -164,8 +164,6 @@ schannel_connect_step1(struct connectdata *conn, int sockindex)
     }
 
     switch(data->set.ssl.version) {
-      default:
-      case CURL_SSLVERSION_DEFAULT:
       case CURL_SSLVERSION_TLSv1:
         schannel_cred.grbitEnabledProtocols = SP_PROT_TLS1_0_CLIENT |
                                               SP_PROT_TLS1_1_CLIENT |
@@ -185,6 +183,12 @@ schannel_connect_step1(struct connectdata *conn, int sockindex)
         break;
       case CURL_SSLVERSION_SSLv2:
         schannel_cred.grbitEnabledProtocols = SP_PROT_SSL2_CLIENT;
+        break;
+      default:
+        schannel_cred.grbitEnabledProtocols = SP_PROT_TLS1_0_CLIENT |
+                                              SP_PROT_TLS1_1_CLIENT |
+                                              SP_PROT_TLS1_2_CLIENT |
+                                              SP_PROT_SSL3_CLIENT;
         break;
     }
 
@@ -294,8 +298,6 @@ schannel_connect_step2(struct connectdata *conn, int sockindex)
   ssize_t nread = -1, written = -1;
   struct SessionHandle *data = conn->data;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
-  unsigned char *reallocated_buffer;
-  size_t reallocated_length;
   SecBuffer outbuf[2];
   SecBufferDesc outbuf_desc;
   SecBuffer inbuf[2];
@@ -328,18 +330,13 @@ schannel_connect_step2(struct connectdata *conn, int sockindex)
   if(connssl->encdata_length - connssl->encdata_offset <
      CURL_SCHANNEL_BUFFER_FREE_SIZE) {
     /* increase internal encrypted data buffer */
-    reallocated_length = connssl->encdata_offset +
-                         CURL_SCHANNEL_BUFFER_FREE_SIZE;
-    reallocated_buffer = realloc(connssl->encdata_buffer,
-                                 reallocated_length);
+    connssl->encdata_length *= CURL_SCHANNEL_BUFFER_STEP_FACTOR;
+    connssl->encdata_buffer = realloc(connssl->encdata_buffer,
+                                      connssl->encdata_length);
 
-    if(reallocated_buffer == NULL) {
+    if(connssl->encdata_buffer == NULL) {
       failf(data, "schannel: unable to re-allocate memory");
       return CURLE_OUT_OF_MEMORY;
-    }
-    else {
-      connssl->encdata_buffer = reallocated_buffer;
-      connssl->encdata_length = reallocated_length;
     }
   }
 
@@ -505,11 +502,11 @@ schannel_connect_step2(struct connectdata *conn, int sockindex)
 static CURLcode
 schannel_connect_step3(struct connectdata *conn, int sockindex)
 {
-  CURLcode result = CURLE_OK;
+  CURLcode retcode = CURLE_OK;
   struct SessionHandle *data = conn->data;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   struct curl_schannel_cred *old_cred = NULL;
-  bool incache;
+  int incache;
 
   DEBUGASSERT(ssl_connect_3 == connssl->connecting_state);
 
@@ -542,21 +539,20 @@ schannel_connect_step3(struct connectdata *conn, int sockindex)
   }
 
   /* save the current session data for possible re-use */
-  incache = !(Curl_ssl_getsessionid(conn, (void **)&old_cred, NULL));
+  incache = !(Curl_ssl_getsessionid(conn, (void**)&old_cred, NULL));
   if(incache) {
     if(old_cred != connssl->cred) {
       infof(data, "schannel: old credential handle is stale, removing\n");
-      Curl_ssl_delsessionid(conn, (void *)old_cred);
+      Curl_ssl_delsessionid(conn, (void*)old_cred);
       incache = FALSE;
     }
   }
-
   if(!incache) {
-    result = Curl_ssl_addsessionid(conn, (void *)connssl->cred,
-                                   sizeof(struct curl_schannel_cred));
-    if(result) {
+    retcode = Curl_ssl_addsessionid(conn, (void*)connssl->cred,
+                                    sizeof(struct curl_schannel_cred));
+    if(retcode) {
       failf(data, "schannel: failed to store credential handle");
-      return result;
+      return retcode;
     }
     else {
       connssl->cred->cached = TRUE;
@@ -573,7 +569,7 @@ static CURLcode
 schannel_connect_common(struct connectdata *conn, int sockindex,
                         bool nonblocking, bool *done)
 {
-  CURLcode result;
+  CURLcode retcode;
   struct SessionHandle *data = conn->data;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   curl_socket_t sockfd = conn->sock[sockindex];
@@ -596,9 +592,9 @@ schannel_connect_common(struct connectdata *conn, int sockindex,
       return CURLE_OPERATION_TIMEDOUT;
     }
 
-    result = schannel_connect_step1(conn, sockindex);
-    if(result)
-      return result;
+    retcode = schannel_connect_step1(conn, sockindex);
+    if(retcode)
+      return retcode;
   }
 
   while(ssl_connect_2 == connssl->connecting_state ||
@@ -650,19 +646,19 @@ schannel_connect_common(struct connectdata *conn, int sockindex,
      * ensuring that a client using select() or epoll() will always
      * have a valid fdset to wait on.
      */
-    result = schannel_connect_step2(conn, sockindex);
-    if(result || (nonblocking &&
-                  (ssl_connect_2 == connssl->connecting_state ||
-                   ssl_connect_2_reading == connssl->connecting_state ||
-                   ssl_connect_2_writing == connssl->connecting_state)))
-      return result;
+    retcode = schannel_connect_step2(conn, sockindex);
+    if(retcode || (nonblocking &&
+                   (ssl_connect_2 == connssl->connecting_state ||
+                    ssl_connect_2_reading == connssl->connecting_state ||
+                    ssl_connect_2_writing == connssl->connecting_state)))
+      return retcode;
 
   } /* repeat step2 until all transactions are done. */
 
   if(ssl_connect_3 == connssl->connecting_state) {
-    result = schannel_connect_step3(conn, sockindex);
-    if(result)
-      return result;
+    retcode = schannel_connect_step3(conn, sockindex);
+    if(retcode)
+      return retcode;
   }
 
   if(ssl_connect_done == connssl->connecting_state) {
@@ -714,7 +710,7 @@ schannel_send(struct connectdata *conn, int sockindex,
   /* calculate the complete message length and allocate a buffer for it */
   data_len = connssl->stream_sizes.cbHeader + len +
               connssl->stream_sizes.cbTrailer;
-  data = (unsigned char *) malloc(data_len);
+  data = (unsigned char*) malloc(data_len);
   if(data == NULL) {
     *err = CURLE_OUT_OF_MEMORY;
     return -1;
@@ -833,11 +829,9 @@ schannel_recv(struct connectdata *conn, int sockindex,
 {
   size_t size = 0;
   ssize_t nread = 0, ret = -1;
-  CURLcode result;
+  CURLcode retcode;
   struct SessionHandle *data = conn->data;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
-  unsigned char *reallocated_buffer;
-  size_t reallocated_length;
   bool done = FALSE;
   SecBuffer inbuf[4];
   SecBufferDesc inbuf_desc;
@@ -859,26 +853,17 @@ schannel_recv(struct connectdata *conn, int sockindex,
   }
 
   /* increase buffer in order to fit the requested amount of data */
-  if(connssl->encdata_length - connssl->encdata_offset <
-     CURL_SCHANNEL_BUFFER_FREE_SIZE || connssl->encdata_length < len) {
+  while(connssl->encdata_length - connssl->encdata_offset <
+        CURL_SCHANNEL_BUFFER_FREE_SIZE || connssl->encdata_length < len) {
     /* increase internal encrypted data buffer */
-    reallocated_length = connssl->encdata_offset +
-                         CURL_SCHANNEL_BUFFER_FREE_SIZE;
-    /* make sure that the requested amount of data fits */
-    if(reallocated_length < len) {
-      reallocated_length = len;
-    }
-    reallocated_buffer = realloc(connssl->encdata_buffer,
-                                 reallocated_length);
+    connssl->encdata_length *= CURL_SCHANNEL_BUFFER_STEP_FACTOR;
+    connssl->encdata_buffer = realloc(connssl->encdata_buffer,
+                                      connssl->encdata_length);
 
-    if(reallocated_buffer == NULL) {
+    if(connssl->encdata_buffer == NULL) {
       failf(data, "schannel: unable to re-allocate memory");
       *err = CURLE_OUT_OF_MEMORY;
       return -1;
-    }
-    else {
-      connssl->encdata_buffer = reallocated_buffer;
-      connssl->encdata_length = reallocated_length;
     }
   }
 
@@ -931,11 +916,10 @@ schannel_recv(struct connectdata *conn, int sockindex,
     }
 
     /* check if everything went fine (server may want to renegotiate
-       or shutdown the connection context) */
+       context) */
     if(sspi_status == SEC_E_OK || sspi_status == SEC_I_RENEGOTIATE ||
                                   sspi_status == SEC_I_CONTEXT_EXPIRED) {
-      /* check for successfully decrypted data, even before actual
-         renegotiation or shutdown of the connection context */
+      /* check for successfully decrypted data */
       if(inbuf[1].BufferType == SECBUFFER_DATA) {
         infof(data, "schannel: decrypted data length: %lu\n",
               inbuf[1].cbBuffer);
@@ -943,25 +927,17 @@ schannel_recv(struct connectdata *conn, int sockindex,
         /* increase buffer in order to fit the received amount of data */
         size = inbuf[1].cbBuffer > CURL_SCHANNEL_BUFFER_FREE_SIZE ?
                inbuf[1].cbBuffer : CURL_SCHANNEL_BUFFER_FREE_SIZE;
-        if(connssl->decdata_length - connssl->decdata_offset < size ||
-           connssl->decdata_length < len) {
+        while(connssl->decdata_length - connssl->decdata_offset < size ||
+              connssl->decdata_length < len) {
           /* increase internal decrypted data buffer */
-          reallocated_length = connssl->decdata_offset + size;
-          /* make sure that the requested amount of data fits */
-          if(reallocated_length < len) {
-            reallocated_length = len;
-          }
-          reallocated_buffer = realloc(connssl->decdata_buffer,
-                                       reallocated_length);
+          connssl->decdata_length *= CURL_SCHANNEL_BUFFER_STEP_FACTOR;
+          connssl->decdata_buffer = realloc(connssl->decdata_buffer,
+                                            connssl->decdata_length);
 
-          if(reallocated_buffer == NULL) {
+          if(connssl->decdata_buffer == NULL) {
             failf(data, "schannel: unable to re-allocate memory");
             *err = CURLE_OUT_OF_MEMORY;
             return -1;
-          }
-          else {
-            connssl->decdata_buffer = reallocated_buffer;
-            connssl->decdata_length = reallocated_length;
           }
         }
 
@@ -1012,9 +988,9 @@ schannel_recv(struct connectdata *conn, int sockindex,
       infof(data, "schannel: renegotiating SSL/TLS connection\n");
       connssl->state = ssl_connection_negotiating;
       connssl->connecting_state = ssl_connect_2_writing;
-      result = schannel_connect_common(conn, sockindex, FALSE, &done);
-      if(result)
-        *err = result;
+      retcode = schannel_connect_common(conn, sockindex, FALSE, &done);
+      if(retcode)
+        *err = retcode;
       else {
         infof(data, "schannel: SSL/TLS connection renegotiated\n");
         /* now retry receiving data */
@@ -1041,8 +1017,6 @@ schannel_recv(struct connectdata *conn, int sockindex,
     infof(data, "schannel: decrypted data buffer: offset %zu length %zu\n",
           connssl->decdata_offset, connssl->decdata_length);
   }
-  else
-    ret = 0;
 
   /* check if the server closed the connection */
   if(ret <= 0 && ( /* special check for Windows 2000 Professional */
@@ -1074,12 +1048,12 @@ Curl_schannel_connect_nonblocking(struct connectdata *conn, int sockindex,
 CURLcode
 Curl_schannel_connect(struct connectdata *conn, int sockindex)
 {
-  CURLcode result;
+  CURLcode retcode;
   bool done = FALSE;
 
-  result = schannel_connect_common(conn, sockindex, FALSE, &done);
-  if(result)
-    return result;
+  retcode = schannel_connect_common(conn, sockindex, FALSE, &done);
+  if(retcode)
+    return retcode;
 
   DEBUGASSERT(done);
 
@@ -1171,29 +1145,29 @@ int Curl_schannel_shutdown(struct connectdata *conn, int sockindex)
               " (bytes written: %zd)\n", curl_easy_strerror(code), written);
       }
     }
-  }
 
-  /* free SSPI Schannel API security context handle */
-  if(connssl->ctxt) {
-    infof(data, "schannel: clear security context handle\n");
-    s_pSecFn->DeleteSecurityContext(&connssl->ctxt->ctxt_handle);
-    Curl_safefree(connssl->ctxt);
-  }
-
-  /* free SSPI Schannel API credential handle */
-  if(connssl->cred) {
-    /* decrement the reference counter of the credential/session handle */
-    if(connssl->cred->refcount > 0) {
-      connssl->cred->refcount--;
-      infof(data, "schannel: decremented credential handle refcount = %d\n",
-            connssl->cred->refcount);
+    /* free SSPI Schannel API security context handle */
+    if(connssl->ctxt) {
+      infof(data, "schannel: clear security context handle\n");
+      s_pSecFn->DeleteSecurityContext(&connssl->ctxt->ctxt_handle);
+      Curl_safefree(connssl->ctxt);
     }
 
-    /* if the handle was not cached and the refcount is zero */
-    if(!connssl->cred->cached && connssl->cred->refcount == 0) {
-      infof(data, "schannel: clear credential handle\n");
-      s_pSecFn->FreeCredentialsHandle(&connssl->cred->cred_handle);
-      Curl_safefree(connssl->cred);
+    /* free SSPI Schannel API credential handle */
+    if(connssl->cred) {
+      /* decrement the reference counter of the credential/session handle */
+      if(connssl->cred->refcount > 0) {
+        connssl->cred->refcount--;
+        infof(data, "schannel: decremented credential handle refcount = %d\n",
+              connssl->cred->refcount);
+      }
+
+      /* if the handle was not cached and the refcount is zero */
+      if(!connssl->cred->cached && connssl->cred->refcount == 0) {
+        infof(data, "schannel: clear credential handle\n");
+        s_pSecFn->FreeCredentialsHandle(&connssl->cred->cred_handle);
+        Curl_safefree(connssl->cred);
+      }
     }
   }
 
@@ -1218,14 +1192,9 @@ void Curl_schannel_session_free(void *ptr)
 {
   struct curl_schannel_cred *cred = ptr;
 
-  if(cred && cred->cached) {
-    if(cred->refcount == 0) {
-      s_pSecFn->FreeCredentialsHandle(&cred->cred_handle);
-      Curl_safefree(cred);
-    }
-    else {
-      cred->cached = FALSE;
-    }
+  if(cred && cred->cached && cred->refcount == 0) {
+    s_pSecFn->FreeCredentialsHandle(&cred->cred_handle);
+    Curl_safefree(cred);
   }
 }
 
@@ -1244,23 +1213,6 @@ size_t Curl_schannel_version(char *buffer, size_t size)
   size = snprintf(buffer, size, "WinSSL");
 
   return size;
-}
-
-int Curl_schannel_random(unsigned char *entropy, size_t length)
-{
-  HCRYPTPROV hCryptProv = 0;
-
-  if(!CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL,
-                          CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
-    return 1;
-
-  if(!CryptGenRandom(hCryptProv, (DWORD)length, entropy)) {
-    CryptReleaseContext(hCryptProv, 0UL);
-    return 1;
-  }
-
-  CryptReleaseContext(hCryptProv, 0UL);
-  return 0;
 }
 
 #ifdef _WIN32_WCE

@@ -33,7 +33,6 @@ BEGIN {
 use strict;
 use warnings;
 use Cwd;
-use Cwd 'abs_path';
 
 use serverhelp qw(
     server_pidfilename
@@ -53,7 +52,6 @@ my $ver_major;
 my $ver_minor;
 my $fips_support;
 my $stunnel_version;
-my $tstunnel_windows;
 my $socketopt;
 my $cmd;
 
@@ -64,7 +62,6 @@ my $ipvnum = 4;       # default IP version of stunneled server
 my $idnum = 1;        # dafault stunneled server instance number
 my $proto = 'https';  # default secure server protocol
 my $conffile;         # stunnel configuration file
-my $capath;           # certificate chain PEM folder
 my $certfile;         # certificate chain PEM file
 
 #***************************************************************************
@@ -181,9 +178,7 @@ if(!$logfile) {
 
 $conffile = "$path/stunnel.conf";
 
-$capath = abs_path($path);
 $certfile = "$srcdir/". ($stuncert?"certs/$stuncert":"stunnel.pem");
-$certfile = abs_path($certfile);
 
 my $ssltext = uc($proto) ." SSL/TLS:";
 
@@ -224,17 +219,6 @@ if($stunnel_version < 310) {
 }
 
 #***************************************************************************
-# Find out if we are running on Windows using the tstunnel binary
-#
-if($stunnel =~ /tstunnel(\.exe)?"?$/) {
-    $tstunnel_windows = 1;
-
-    # replace Cygwin and MinGW drives within paths
-    $capath =~ s/^(\/cygdrive)?\/(\w)\//$2\:\//;
-    $certfile =~ s/^(\/cygdrive)?\/(\w)\//$2\:\//;
-}
-
-#***************************************************************************
 # Build command to execute for stunnel 3.X versions
 #
 if($stunnel_version < 400) {
@@ -269,24 +253,26 @@ if($stunnel_version >= 400) {
     $SIG{TERM} = \&exit_signal_handler;
     # stunnel configuration file
     if(open(STUNCONF, ">$conffile")) {
-        print STUNCONF "CApath = $capath\n";
-        print STUNCONF "cert = $certfile\n";
-        print STUNCONF "debug = $loglevel\n";
-        print STUNCONF "socket = $socketopt\n";
+        print STUNCONF "
+            CApath = $path
+            cert = $certfile
+            debug = $loglevel
+            socket = $socketopt";
         if($fips_support) {
             # disable fips in case OpenSSL doesn't support it
-            print STUNCONF "fips = no\n";
+            print STUNCONF "
+            fips = no";
         }
-        if(!$tstunnel_windows) {
-            # do not use Linux-specific options on Windows
-            print STUNCONF "output = $logfile\n";
-            print STUNCONF "pid = $pidfile\n";
-            print STUNCONF "foreground = yes\n";
+        if($stunnel !~ /tstunnel(\.exe)?"?$/) {
+            print STUNCONF "
+            output = $logfile
+            pid = $pidfile
+            foreground = yes";
         }
-        print STUNCONF "\n";
-        print STUNCONF "[curltest]\n";
-        print STUNCONF "accept = $accept_port\n";
-        print STUNCONF "connect = $target_port\n";
+        print STUNCONF "
+            [curltest]
+            accept = $accept_port
+            connect = $target_port";
         if(!close(STUNCONF)) {
             print "$ssltext Error closing file $conffile\n";
             exit 1;
@@ -299,18 +285,13 @@ if($stunnel_version >= 400) {
     if($verbose) {
         print uc($proto) ." server (stunnel $ver_major.$ver_minor)\n";
         print "cmd: $cmd\n";
-        print "CApath = $capath\n";
+        print "CApath = $path\n";
         print "cert = $certfile\n";
+        print "pid = $pidfile\n";
         print "debug = $loglevel\n";
         print "socket = $socketopt\n";
-        if($fips_support) {
-            print "fips = no\n";
-        }
-        if(!$tstunnel_windows) {
-            print "pid = $pidfile\n";
-            print "output = $logfile\n";
-            print "foreground = yes\n";
-        }
+        print "output = $logfile\n";
+        print "foreground = yes\n";
         print "\n";
         print "[curltest]\n";
         print "accept = $accept_port\n";
@@ -326,7 +307,7 @@ chmod(0600, $certfile) if(-f $certfile);
 #***************************************************************************
 # Run tstunnel on Windows.
 #
-if($tstunnel_windows) {
+if($stunnel =~ /tstunnel(\.exe)?"?$/) {
     # Fake pidfile for tstunnel on Windows.
     if(open(OUT, ">$pidfile")) {
         print OUT $$ . "\n";

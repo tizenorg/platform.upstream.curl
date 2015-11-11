@@ -1,5 +1,5 @@
 <testcase>
-# Based on test900
+# Based on test802
 # N.B. --libcurl output not sufficient to deal with uploaded files.
 <info>
 <keywords>
@@ -23,7 +23,7 @@ CAPA SIZE
 smtp
 </server>
  <name>
---libcurl for SMTP
+SMTP
  </name>
 <file name="log/test1406.eml">
 From: different

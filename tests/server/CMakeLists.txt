@@ -9,11 +9,11 @@ function(SETUP_EXECUTABLE TEST_NAME)    # ARGN are the files in the test
     ${CURL_BINARY_DIR}/lib      # To be able to reach "curl_config.h"
     ${CURL_BINARY_DIR}/include  # To be able to reach "curl/curlbuild.h"
     )
-  if(USE_ARES)
+  if(CURL_USE_ARES)
     include_directories(${CARES_INCLUDE_DIR})
   endif()
-
-  target_link_libraries(${TEST_NAME} ${CURL_LIBS})
+  # resolve test needs this
+  setup_curl_dependencies(${TEST_NAME})
 
   # Test servers simply are standalone programs that do not use libcurl
   # library.  For convinience and to ease portability of these servers,

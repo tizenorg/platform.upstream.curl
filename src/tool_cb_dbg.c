@@ -145,7 +145,7 @@ int tool_debug_cb(CURL *handle, curl_infotype type,
         if(!config->isatty || ((output != stderr) && (output != stdout))) {
           if(!newl)
             fprintf(output, "%s%s ", timebuf, s_infotype[type]);
-          fprintf(output, "[%zd bytes data]\n", size);
+          fprintf(output, "[data not shown]\n");
           newl = FALSE;
           traced_data = TRUE;
         }

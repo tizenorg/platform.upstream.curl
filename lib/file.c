@@ -196,9 +196,8 @@ static CURLcode file_connect(struct connectdata *conn, bool *done)
   int i;
   char *actual_path;
 #endif
-  int real_path_len;
 
-  real_path = curl_easy_unescape(data, data->state.path, 0, &real_path_len);
+  real_path = curl_easy_unescape(data, data->state.path, 0, NULL);
   if(!real_path)
     return CURLE_OUT_OF_MEMORY;
 
@@ -223,23 +222,16 @@ static CURLcode file_connect(struct connectdata *conn, bool *done)
      (actual_path[2] == ':' || actual_path[2] == '|')) {
     actual_path[2] = ':';
     actual_path++;
-    real_path_len--;
   }
 
   /* change path separators from '/' to '\\' for DOS, Windows and OS/2 */
-  for(i=0; i < real_path_len; ++i)
+  for(i=0; actual_path[i] != '\0'; ++i)
     if(actual_path[i] == '/')
       actual_path[i] = '\\';
-    else if(!actual_path[i]) /* binary zero */
-      return CURLE_URL_MALFORMAT;
 
   fd = open_readonly(actual_path, O_RDONLY|O_BINARY);
   file->path = actual_path;
 #else
-  if(memchr(real_path, 0, real_path_len))
-    /* binary zeroes indicate foul play */
-    return CURLE_URL_MALFORMAT;
-
   fd = open_readonly(real_path, O_RDONLY);
   file->path = real_path;
 #endif
@@ -303,7 +295,7 @@ static CURLcode file_upload(struct connectdata *conn)
   const char *dir = strchr(file->path, DIRSEP);
   int fd;
   int mode;
-  CURLcode result = CURLE_OK;
+  CURLcode res=CURLE_OK;
   struct SessionHandle *data = conn->data;
   char *buf = data->state.buffer;
   size_t nread;
@@ -359,10 +351,10 @@ static CURLcode file_upload(struct connectdata *conn)
       data->state.resume_from = (curl_off_t)file_stat.st_size;
   }
 
-  while(!result) {
+  while(res == CURLE_OK) {
     int readcount;
-    result = Curl_fillreadbuffer(conn, BUFSIZE, &readcount);
-    if(result)
+    res = Curl_fillreadbuffer(conn, BUFSIZE, &readcount);
+    if(res)
       break;
 
     if(readcount <= 0)  /* fix questionable compare error. curlvms */
@@ -389,7 +381,7 @@ static CURLcode file_upload(struct connectdata *conn)
     /* write the data to the target */
     nwrite = write(fd, buf2, nread);
     if(nwrite != nread) {
-      result = CURLE_SEND_ERROR;
+      res = CURLE_SEND_ERROR;
       break;
     }
 
@@ -398,16 +390,16 @@ static CURLcode file_upload(struct connectdata *conn)
     Curl_pgrsSetUploadCounter(data, bytecount);
 
     if(Curl_pgrsUpdate(conn))
-      result = CURLE_ABORTED_BY_CALLBACK;
+      res = CURLE_ABORTED_BY_CALLBACK;
     else
-      result = Curl_speedcheck(data, now);
+      res = Curl_speedcheck(data, now);
   }
-  if(!result && Curl_pgrsUpdate(conn))
-    result = CURLE_ABORTED_BY_CALLBACK;
+  if(!res && Curl_pgrsUpdate(conn))
+    res = CURLE_ABORTED_BY_CALLBACK;
 
   close(fd);
 
-  return result;
+  return res;
 }
 
 /*
@@ -425,7 +417,7 @@ static CURLcode file_do(struct connectdata *conn, bool *done)
      are supported. This means that files on remotely mounted directories
      (via NFS, Samba, NT sharing) can be accessed through a file:// URL
   */
-  CURLcode result = CURLE_OK;
+  CURLcode res = CURLE_OK;
   struct_stat statbuf; /* struct_stat instead of struct stat just to allow the
                           Windows version to have a different struct without
                           having to redefine the simple word 'stat' */
@@ -472,6 +464,7 @@ static CURLcode file_do(struct connectdata *conn, bool *done)
      information. Which for FILE can't be much more than the file size and
      date. */
   if(data->set.opt_no_body && data->set.include_header && fstated) {
+    CURLcode result;
     snprintf(buf, sizeof(data->state.buffer),
              "Content-Length: %" CURL_FORMAT_CURL_OFF_T "\r\n", expected_size);
     result = Curl_client_write(conn, CLIENTWRITE_BOTH, buf, 0);
@@ -553,7 +546,7 @@ static CURLcode file_do(struct connectdata *conn, bool *done)
 
   Curl_pgrsTime(data, TIMER_STARTTRANSFER);
 
-  while(!result) {
+  while(res == CURLE_OK) {
     /* Don't fill a whole buffer if we want less than all data */
     size_t bytestoread =
       (expected_size < CURL_OFF_T_C(BUFSIZE) - CURL_OFF_T_C(1)) ?
@@ -570,21 +563,21 @@ static CURLcode file_do(struct connectdata *conn, bool *done)
     bytecount += nread;
     expected_size -= nread;
 
-    result = Curl_client_write(conn, CLIENTWRITE_BODY, buf, nread);
-    if(result)
-      return result;
+    res = Curl_client_write(conn, CLIENTWRITE_BODY, buf, nread);
+    if(res)
+      return res;
 
     Curl_pgrsSetDownloadCounter(data, bytecount);
 
     if(Curl_pgrsUpdate(conn))
-      result = CURLE_ABORTED_BY_CALLBACK;
+      res = CURLE_ABORTED_BY_CALLBACK;
     else
-      result = Curl_speedcheck(data, now);
+      res = Curl_speedcheck(data, now);
   }
   if(Curl_pgrsUpdate(conn))
-    result = CURLE_ABORTED_BY_CALLBACK;
+    res = CURLE_ABORTED_BY_CALLBACK;
 
-  return result;
+  return res;
 }
 
 #endif

@@ -131,7 +131,7 @@ CURLcode Curl_conncache_add_conn(struct conncache *connc,
                                       conn->host.name);
   if(!bundle) {
     result = Curl_bundle_create(data, &new_bundle);
-    if(result)
+    if(result != CURLE_OK)
       return result;
 
     if(!conncache_add_bundle(data->state.conn_cache,
@@ -143,7 +143,7 @@ CURLcode Curl_conncache_add_conn(struct conncache *connc,
   }
 
   result = Curl_bundle_add_conn(bundle, conn);
-  if(result) {
+  if(result != CURLE_OK) {
     if(new_bundle)
       conncache_remove_bundle(data->state.conn_cache, new_bundle);
     return result;
@@ -151,10 +151,6 @@ CURLcode Curl_conncache_add_conn(struct conncache *connc,
 
   conn->connection_id = connc->next_connection_id++;
   connc->num_connections++;
-
-  DEBUGF(infof(conn->data, "Added connection %ld. "
-               "The cache now contains %" CURL_FORMAT_CURL_OFF_TU " members\n",
-               conn->connection_id, (curl_off_t) connc->num_connections));
 
   return CURLE_OK;
 }
@@ -175,9 +171,8 @@ void Curl_conncache_remove_conn(struct conncache *connc,
     if(connc) {
       connc->num_connections--;
 
-      DEBUGF(infof(conn->data, "The cache now contains %"
-                   CURL_FORMAT_CURL_OFF_TU " members\n",
-                   (curl_off_t) connc->num_connections));
+      DEBUGF(infof(conn->data, "The cache now contains %d members\n",
+                   connc->num_connections));
     }
   }
 }
@@ -204,20 +199,22 @@ void Curl_conncache_foreach(struct conncache *connc,
   he = Curl_hash_next_element(&iter);
   while(he) {
     struct connectbundle *bundle;
+    struct connectdata *conn;
 
     bundle = he->ptr;
-    he = Curl_hash_next_element(&iter);
 
     curr = bundle->conn_list->head;
     while(curr) {
       /* Yes, we need to update curr before calling func(), because func()
          might decide to remove the connection */
-      struct connectdata *conn = curr->ptr;
+      conn = curr->ptr;
       curr = curr->next;
 
       if(1 == func(conn, param))
         return;
     }
+
+    he = Curl_hash_next_element(&iter);
   }
 }
 
@@ -227,6 +224,7 @@ struct connectdata *
 Curl_conncache_find_first_connection(struct conncache *connc)
 {
   struct curl_hash_iterator iter;
+  struct curl_llist_element *curr;
   struct curl_hash_element *he;
   struct connectbundle *bundle;
 
@@ -234,7 +232,6 @@ Curl_conncache_find_first_connection(struct conncache *connc)
 
   he = Curl_hash_next_element(&iter);
   while(he) {
-    struct curl_llist_element *curr;
     bundle = he->ptr;
 
     curr = bundle->conn_list->head;

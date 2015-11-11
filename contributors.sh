@@ -25,10 +25,6 @@
 # This script shows all mentioned contributors from <hash> until HEAD. To aid
 # when writing RELEASE-NOTES and THANKS.
 #
-# Use --releasenotes to also include the names from the existing RELEASE-NOTES
-# file, which is handy when we've added names manually in there that should be
-# included in an updated list.
-#
 
 start=$1
 
@@ -38,35 +34,17 @@ fi
 
 # filter out Author:, Commit: and *by: lines
 # cut off the email parts
-# split list of names at comma
-# split list of names at " and "
 # cut off spaces first and last on the line
-# filter alternatives through THANKS-filter
 # only count names with a space (ie more than one word)
 # sort all unique names
 # awk them into RELEASE-NOTES format
-(
 git log $start..HEAD | \
-egrep -i '(Author|Commit|by):' | \
+egrep '(Author|Commit|by):' | \
 cut -d: -f2- | \
 cut '-d<' -f1 | \
-tr , '\012' | \
-sed 's/ and /\n/' | \
-sed -e 's/^ //' -e 's/ $//g'
-
-if echo "$*" | grep -qw -- '--releasenotes';then
-    # if --releasenotes was used
-    # grep out the list of names from RELEASE-NOTES
-    # split on ", "
-    # remove leading white spaces
-grep "^  [^ ]" RELEASE-NOTES| \
-sed 's/, */\n/g'| \
-sed 's/^ *//'
-fi
-)| \
-sed -f ./docs/THANKS-filter | \
+sed -e 's/^ //' -e 's/ $//g' | \
 grep ' ' | \
-sort -fu | \
+sort -u |
 awk '{
  num++;
  n = sprintf("%s%s%s,", n, length(n)?" ":"", $0);

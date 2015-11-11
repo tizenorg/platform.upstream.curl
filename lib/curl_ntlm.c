@@ -22,7 +22,7 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_HTTP) && defined(USE_NTLM)
+#ifdef USE_NTLM
 
 /*
  * NTLM details:
@@ -39,7 +39,6 @@
 #include "curl_ntlm.h"
 #include "curl_ntlm_msgs.h"
 #include "curl_ntlm_wb.h"
-#include "curl_sasl.h"
 #include "url.h"
 #include "curl_memory.h"
 
@@ -70,6 +69,12 @@ CURLcode Curl_input_ntlm(struct connectdata *conn,
   struct ntlmdata *ntlm;
   CURLcode result = CURLE_OK;
 
+#ifdef USE_NSS
+  result = Curl_nss_force_init(conn->data);
+  if(result)
+    return result;
+#endif
+
   ntlm = proxy ? &conn->proxyntlm : &conn->ntlm;
 
   if(checkprefix("NTLM", header)) {
@@ -79,8 +84,8 @@ CURLcode Curl_input_ntlm(struct connectdata *conn,
       header++;
 
     if(*header) {
-      result = Curl_sasl_decode_ntlm_type2_message(conn->data, header, ntlm);
-      if(result)
+      result = Curl_ntlm_decode_type2_message(conn->data, header, ntlm);
+      if(CURLE_OK != result)
         return result;
 
       ntlm->state = NTLMSTATE_TYPE2; /* We got a type-2 message */
@@ -107,11 +112,12 @@ CURLcode Curl_input_ntlm(struct connectdata *conn,
 /*
  * This is for creating ntlm header output
  */
-CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy)
+CURLcode Curl_output_ntlm(struct connectdata *conn,
+                          bool proxy)
 {
   char *base64 = NULL;
   size_t len = 0;
-  CURLcode result;
+  CURLcode error;
 
   /* point to the address of the pointer that holds the string to send to the
      server, which is for a plain host or for a HTTP proxy */
@@ -169,10 +175,10 @@ CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy)
   case NTLMSTATE_TYPE1:
   default: /* for the weird cases we (re)start here */
     /* Create a type-1 message */
-    result = Curl_sasl_create_ntlm_type1_message(userp, passwdp, ntlm, &base64,
-                                                 &len);
-    if(result)
-      return result;
+    error = Curl_ntlm_create_type1_message(userp, passwdp, ntlm, &base64,
+                                           &len);
+    if(error)
+      return error;
 
     if(base64) {
       Curl_safefree(*allocuserpwd);
@@ -182,17 +188,16 @@ CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy)
       free(base64);
       if(!*allocuserpwd)
         return CURLE_OUT_OF_MEMORY;
-
       DEBUG_OUT(fprintf(stderr, "**** Header %s\n ", *allocuserpwd));
     }
     break;
 
   case NTLMSTATE_TYPE2:
     /* We already received the type-2 message, create a type-3 message */
-    result = Curl_sasl_create_ntlm_type3_message(conn->data, userp, passwdp,
-                                                 ntlm, &base64, &len);
-    if(result)
-      return result;
+    error = Curl_ntlm_create_type3_message(conn->data, userp, passwdp,
+                                           ntlm, &base64, &len);
+    if(error)
+      return error;
 
     if(base64) {
       Curl_safefree(*allocuserpwd);
@@ -202,7 +207,6 @@ CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy)
       free(base64);
       if(!*allocuserpwd)
         return CURLE_OUT_OF_MEMORY;
-
       DEBUG_OUT(fprintf(stderr, "**** %s\n ", *allocuserpwd));
 
       ntlm->state = NTLMSTATE_TYPE3; /* we send a type-3 */
@@ -223,12 +227,22 @@ CURLcode Curl_output_ntlm(struct connectdata *conn, bool proxy)
 
 void Curl_http_ntlm_cleanup(struct connectdata *conn)
 {
-  Curl_sasl_ntlm_cleanup(&conn->ntlm);
-  Curl_sasl_ntlm_cleanup(&conn->proxyntlm);
-
-#if defined(NTLM_WB_ENABLED)
+#ifdef USE_WINDOWS_SSPI
+  Curl_ntlm_sspi_cleanup(&conn->ntlm);
+  Curl_ntlm_sspi_cleanup(&conn->proxyntlm);
+#elif defined(NTLM_WB_ENABLED)
   Curl_ntlm_wb_cleanup(conn);
+#else
+  (void)conn;
+#endif
+
+#ifndef USE_WINDOWS_SSPI
+  Curl_safefree(conn->ntlm.target_info);
+  conn->ntlm.target_info_len = 0;
+
+  Curl_safefree(conn->proxyntlm.target_info);
+  conn->proxyntlm.target_info_len = 0;
 #endif
 }
 
-#endif /* !CURL_DISABLE_HTTP && USE_NTLM */
+#endif /* USE_NTLM */

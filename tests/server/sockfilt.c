@@ -23,7 +23,7 @@
 
 /* Purpose
  *
- * 1. Accept a TCP connection on a custom port (IPv4 or IPv6), or connect
+ * 1. Accept a TCP connection on a custom port (ipv4 or ipv6), or connect
  *    to a given (localhost) port.
  *
  * 2. Get commands on STDIN. Pass data on to the TCP stream.
@@ -285,10 +285,10 @@ static ssize_t read_wincon(int fd, void *buf, size_t count)
   }
 
   if(GetConsoleMode(handle, &mode)) {
-    success = ReadConsole(handle, buf, curlx_uztoul(count), &rcount, NULL);
+    success = ReadConsole(handle, buf, count, &rcount, NULL);
   }
   else {
-    success = ReadFile(handle, buf, curlx_uztoul(count), &rcount, NULL);
+    success = ReadFile(handle, buf, count, &rcount, NULL);
   }
   if(success) {
     return rcount;
@@ -320,10 +320,10 @@ static ssize_t write_wincon(int fd, const void *buf, size_t count)
   }
 
   if(GetConsoleMode(handle, &mode)) {
-    success = WriteConsole(handle, buf, curlx_uztoul(count), &wcount, NULL);
+    success = WriteConsole(handle, buf, count, &wcount, NULL);
   }
   else {
-    success = WriteFile(handle, buf, curlx_uztoul(count), &wcount, NULL);
+    success = WriteFile(handle, buf, count, &wcount, NULL);
   }
   if(success) {
     return wcount;
@@ -550,21 +550,15 @@ static DWORD WINAPI select_ws_wait_thread(LPVOID lpParameter)
       while(WaitForMultipleObjectsEx(2, handles, FALSE, INFINITE, FALSE)
             == WAIT_OBJECT_0 + 1) {
         /* get total size of file */
-        length = 0;
         size.QuadPart = 0;
-        size.LowPart = GetFileSize(handle, &length);
-        if((size.LowPart != INVALID_FILE_SIZE) ||
-           (GetLastError() == NO_ERROR)) {
-          size.HighPart = length;
+        if(GetFileSizeEx(handle, &size)) {
           /* get the current position within the file */
           pos.QuadPart = 0;
-          pos.LowPart = SetFilePointer(handle, 0, &pos.HighPart, FILE_CURRENT);
-          if((pos.LowPart != INVALID_SET_FILE_POINTER) ||
-             (GetLastError() == NO_ERROR)) {
+          if(SetFilePointerEx(handle, pos, &pos, FILE_CURRENT)) {
             /* compare position with size, abort if not equal */
             if(size.QuadPart == pos.QuadPart) {
               /* sleep and continue waiting */
-              SleepEx(0, FALSE);
+              SleepEx(100, FALSE);
               continue;
             }
           }
@@ -585,7 +579,6 @@ static DWORD WINAPI select_ws_wait_thread(LPVOID lpParameter)
       while(WaitForMultipleObjectsEx(2, handles, FALSE, INFINITE, FALSE)
             == WAIT_OBJECT_0 + 1) {
         /* check if this is an actual console handle */
-        length = 0;
         if(GetConsoleMode(handle, &length)) {
           /* retrieve an event from the console buffer */
           length = 0;
@@ -614,18 +607,17 @@ static DWORD WINAPI select_ws_wait_thread(LPVOID lpParameter)
       while(WaitForMultipleObjectsEx(2, handles, FALSE, INFINITE, FALSE)
             == WAIT_OBJECT_0 + 1) {
         /* peek into the pipe and retrieve the amount of data available */
-        length = 0;
         if(PeekNamedPipe(handle, NULL, 0, NULL, &length, NULL)) {
           /* if there is no data available, sleep and continue waiting */
           if(length == 0) {
-            SleepEx(0, FALSE);
+            SleepEx(100, FALSE);
             continue;
           }
         }
         else {
           /* if the pipe has been closed, sleep and continue waiting */
           if(GetLastError() == ERROR_BROKEN_PIPE) {
-            SleepEx(0, FALSE);
+            SleepEx(100, FALSE);
             continue;
           }
         }
@@ -666,22 +658,15 @@ static HANDLE select_ws_wait(HANDLE handle, HANDLE event)
 
   return thread;
 }
-struct select_ws_data {
-  curl_socket_t fd;      /* the original input handle   (indexed by fds) */
-  curl_socket_t wsasock; /* the internal socket handle  (indexed by wsa) */
-  WSAEVENT wsaevent;     /* the internal WINSOCK2 event (indexed by wsa) */
-  HANDLE thread;         /* the internal threads handle (indexed by thd) */
-};
 static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
                      fd_set *exceptfds, struct timeval *timeout)
 {
   DWORD milliseconds, wait, idx;
+  WSAEVENT wsaevent, *wsaevents;
   WSANETWORKEVENTS wsanetevents;
-  struct select_ws_data *data;
-  HANDLE handle, *handles;
-  curl_socket_t sock;
+  HANDLE handle, *handles, *threads;
+  curl_socket_t sock, *fdarr, *wsasocks;
   long networkevents;
-  WSAEVENT wsaevent;
   int error, fds;
   HANDLE waitevent = NULL;
   DWORD nfd = 0, thd = 0, wsa = 0;
@@ -706,9 +691,9 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
     return -1;
   }
 
-  /* allocate internal array for the internal data */
-  data = malloc(nfds * sizeof(struct select_ws_data));
-  if(data == NULL) {
+  /* allocate internal array for the original input handles */
+  fdarr = malloc(nfds * sizeof(curl_socket_t));
+  if(fdarr == NULL) {
     errno = ENOMEM;
     return -1;
   }
@@ -716,14 +701,40 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
   /* allocate internal array for the internal event handles */
   handles = malloc(nfds * sizeof(HANDLE));
   if(handles == NULL) {
-    free(data);
+    free(fdarr);
     errno = ENOMEM;
     return -1;
   }
 
-  /* clear internal arrays */
-  memset(data, 0, nfds * sizeof(struct select_ws_data));
-  memset(handles, 0, nfds * sizeof(HANDLE));
+  /* allocate internal array for the internal threads handles */
+  threads = malloc(nfds * sizeof(HANDLE));
+  if(threads == NULL) {
+    free(handles);
+    free(fdarr);
+    errno = ENOMEM;
+    return -1;
+  }
+
+  /* allocate internal array for the internal socket handles */
+  wsasocks = malloc(nfds * sizeof(curl_socket_t));
+  if(wsasocks == NULL) {
+    free(threads);
+    free(handles);
+    free(fdarr);
+    errno = ENOMEM;
+    return -1;
+  }
+
+  /* allocate internal array for the internal WINSOCK2 events */
+  wsaevents = malloc(nfds * sizeof(WSAEVENT));
+  if(wsaevents == NULL) {
+    free(threads);
+    free(wsasocks);
+    free(handles);
+    free(fdarr);
+    errno = ENOMEM;
+    return -1;
+  }
 
   /* loop over the handles in the input descriptor sets */
   for(fds = 0; fds < nfds; fds++) {
@@ -741,12 +752,12 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
 
     /* only wait for events for which we actually care */
     if(networkevents) {
-      data[nfd].fd = curlx_sitosk(fds);
+      fdarr[nfd] = curlx_sitosk(fds);
       if(fds == fileno(stdin)) {
         handle = GetStdHandle(STD_INPUT_HANDLE);
         handle = select_ws_wait(handle, waitevent);
         handles[nfd] = handle;
-        data[thd].thread = handle;
+        threads[thd] = handle;
         thd++;
       }
       else if(fds == fileno(stdout)) {
@@ -762,8 +773,8 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
           if(error != SOCKET_ERROR) {
             handle = (HANDLE) wsaevent;
             handles[nfd] = handle;
-            data[wsa].wsasock = curlx_sitosk(fds);
-            data[wsa].wsaevent = wsaevent;
+            wsasocks[wsa] = curlx_sitosk(fds);
+            wsaevents[wsa] = wsaevent;
             wsa++;
           }
           else {
@@ -771,7 +782,7 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
             handle = (HANDLE) curlx_sitosk(fds);
             handle = select_ws_wait(handle, waitevent);
             handles[nfd] = handle;
-            data[thd].thread = handle;
+            threads[thd] = handle;
             thd++;
           }
         }
@@ -797,7 +808,7 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
   /* loop over the internal handles returned in the descriptors */
   for(idx = 0; idx < nfd; idx++) {
     handle = handles[idx];
-    sock = data[idx].fd;
+    sock = fdarr[idx];
     fds = curlx_sktosi(sock);
 
     /* check if the current internal handle was triggered */
@@ -857,19 +868,22 @@ static int select_ws(int nfds, fd_set *readfds, fd_set *writefds,
   }
 
   for(idx = 0; idx < wsa; idx++) {
-    WSAEventSelect(data[idx].wsasock, NULL, 0);
-    WSACloseEvent(data[idx].wsaevent);
+    WSAEventSelect(wsasocks[idx], NULL, 0);
+    WSACloseEvent(wsaevents[idx]);
   }
 
   for(idx = 0; idx < thd; idx++) {
-    WaitForSingleObject(data[idx].thread, INFINITE);
-    CloseHandle(data[idx].thread);
+    WaitForSingleObject(threads[thd], INFINITE);
+    CloseHandle(threads[thd]);
   }
 
   CloseHandle(waitevent);
 
+  free(wsaevents);
+  free(wsasocks);
+  free(threads);
   free(handles);
-  free(data);
+  free(fdarr);
 
   return ret;
 }

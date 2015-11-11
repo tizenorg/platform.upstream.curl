@@ -6,7 +6,6 @@ RETR
 LIST
 wildcardmatch
 ftplistparser
-flaky
 </keywords>
 </info>
 

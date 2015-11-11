@@ -530,10 +530,8 @@ static int parsedate(const char *date, time_t *output)
     /* Add the time zone diff between local time zone and GMT. */
     long delta = (long)(tzoff!=-1?tzoff:0);
 
-    if((delta>0) && (t > LONG_MAX - delta)) {
-      *output = 0x7fffffff;
-      return PARSEDATE_LATER; /* time_t overflow */
-    }
+    if((delta>0) && (t > LONG_MAX  - delta))
+      return -1; /* time_t overflow */
 
     t += delta;
   }
@@ -545,7 +543,7 @@ static int parsedate(const char *date, time_t *output)
 
 time_t curl_getdate(const char *p, const time_t *now)
 {
-  time_t parsed = -1;
+  time_t parsed;
   int rc = parsedate(p, &parsed);
   (void)now; /* legacy argument from the past that we ignore */
 
@@ -562,6 +560,9 @@ time_t curl_getdate(const char *p, const time_t *now)
 /*
  * Curl_gmtime() is a gmtime() replacement for portability. Do not use the
  * gmtime_r() or gmtime() functions anywhere else but here.
+ *
+ * To make sure no such function calls slip in, we define them to cause build
+ * errors, which is why we use the name within parentheses in this function.
  *
  */
 

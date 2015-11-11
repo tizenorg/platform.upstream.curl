@@ -73,7 +73,7 @@ use vars qw($name $email $desc $confopts $runtestopts $setupfile $mktarball
             $timestamp $notes);
 
 # version of this script
-$version='2014-11-25';
+$version='2012-11-30';
 $fixed=0;
 
 # Determine if we're running from git or a canned copy of curl,
@@ -258,13 +258,7 @@ sub get_host_triplet {
   return $triplet;
 }
 
-if($name && $email && $desc) {
-  # having these fields set are enough to continue, skip reading the setup
-  # file
-  $infixed=4;
-  $fixed=4;
-}
-elsif (open(F, "$setupfile")) {
+if (open(F, "$setupfile")) {
   while (<F>) {
     if (/(\w+)=(.*)/) {
       eval "\$$1=$2;";
@@ -272,8 +266,7 @@ elsif (open(F, "$setupfile")) {
   }
   close(F);
   $infixed=$fixed;
-}
-else {
+} else {
   $infixed=0;    # so that "additional args to configure" works properly first time...
 }
 
@@ -340,7 +333,6 @@ logit "EMAIL = $email";
 logit "DESC = $desc";
 logit "NOTES = $notes";
 logit "CONFOPTS = $confopts";
-logit "RUNTESTOPTS = ".$runtestopts;
 logit "CPPFLAGS = ".$ENV{CPPFLAGS};
 logit "CFLAGS = ".$ENV{CFLAGS};
 logit "LDFLAGS = ".$ENV{LDFLAGS};

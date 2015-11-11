@@ -6,7 +6,7 @@
  *                             \___|\___/|_| \_\_____|
  *
  * Copyright (C) 2012 - 2014, Nick Zitzmann, <nickzman@gmail.com>.
- * Copyright (C) 2012 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -30,7 +30,6 @@
 
 #include "urldata.h" /* for the SessionHandle definition */
 #include "curl_base64.h"
-#include "strtok.h"
 
 #ifdef USE_DARWINSSL
 
@@ -86,7 +85,6 @@
 #define CURL_SUPPORT_MAC_10_6 0
 #define CURL_SUPPORT_MAC_10_7 0
 #define CURL_SUPPORT_MAC_10_8 0
-#define CURL_SUPPORT_MAC_10_9 0
 
 #else
 #error "The darwinssl back-end requires iOS or OS X."
@@ -784,7 +782,6 @@ CF_INLINE void GetDarwinVersionNumber(int *major, int *minor)
   char *os_version;
   size_t os_version_len;
   char *os_version_major, *os_version_minor/*, *os_version_point*/;
-  char *tok_buf;
 
   /* Get the Darwin kernel version from the kernel using sysctl(): */
   mib[0] = CTL_KERN;
@@ -800,9 +797,9 @@ CF_INLINE void GetDarwinVersionNumber(int *major, int *minor)
   }
 
   /* Parse the version: */
-  os_version_major = strtok_r(os_version, ".", &tok_buf);
-  os_version_minor = strtok_r(NULL, ".", &tok_buf);
-  /*os_version_point = strtok_r(NULL, ".", &tok_buf);*/
+  os_version_major = strtok(os_version, ".");
+  os_version_minor = strtok(NULL, ".");
+  /*os_version_point = strtok(NULL, ".");*/
   *major = atoi(os_version_major);
   *minor = atoi(os_version_minor);
   free(os_version);
@@ -1058,8 +1055,10 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
 #if CURL_BUILD_MAC_10_8 || CURL_BUILD_IOS
   if(SSLSetProtocolVersionMax != NULL) {
     switch(data->set.ssl.version) {
-      default:
-      case CURL_SSLVERSION_DEFAULT:
+      case CURL_SSLVERSION_DEFAULT: default:
+        (void)SSLSetProtocolVersionMin(connssl->ssl_ctx, kSSLProtocol3);
+        (void)SSLSetProtocolVersionMax(connssl->ssl_ctx, kTLSProtocol12);
+        break;
       case CURL_SSLVERSION_TLSv1:
         (void)SSLSetProtocolVersionMin(connssl->ssl_ctx, kTLSProtocol1);
         (void)SSLSetProtocolVersionMax(connssl->ssl_ctx, kTLSProtocol12);
@@ -1077,11 +1076,7 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
         (void)SSLSetProtocolVersionMax(connssl->ssl_ctx, kTLSProtocol12);
         break;
       case CURL_SSLVERSION_SSLv3:
-        err = SSLSetProtocolVersionMin(connssl->ssl_ctx, kSSLProtocol3);
-        if(err != noErr) {
-          failf(data, "Your version of the OS does not support SSLv3");
-          return CURLE_SSL_CONNECT_ERROR;
-        }
+        (void)SSLSetProtocolVersionMin(connssl->ssl_ctx, kSSLProtocol3);
         (void)SSLSetProtocolVersionMax(connssl->ssl_ctx, kSSLProtocol3);
         break;
       case CURL_SSLVERSION_SSLv2:
@@ -1099,8 +1094,20 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
                                        kSSLProtocolAll,
                                        false);
     switch (data->set.ssl.version) {
-      default:
-      case CURL_SSLVERSION_DEFAULT:
+      case CURL_SSLVERSION_DEFAULT: default:
+        (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                           kSSLProtocol3,
+                                           true);
+        (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                           kTLSProtocol1,
+                                           true);
+        (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                           kTLSProtocol11,
+                                           true);
+        (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                           kTLSProtocol12,
+                                           true);
+        break;
       case CURL_SSLVERSION_TLSv1:
         (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
                                            kTLSProtocol1,
@@ -1128,13 +1135,9 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
                                            true);
         break;
       case CURL_SSLVERSION_SSLv3:
-        err = SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+        (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
                                            kSSLProtocol3,
                                            true);
-        if(err != noErr) {
-          failf(data, "Your version of the OS does not support SSLv3");
-          return CURLE_SSL_CONNECT_ERROR;
-        }
         break;
       case CURL_SSLVERSION_SSLv2:
         err = SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
@@ -1153,6 +1156,13 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
   switch(data->set.ssl.version) {
     default:
     case CURL_SSLVERSION_DEFAULT:
+      (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                         kSSLProtocol3,
+                                         true);
+      (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+                                         kTLSProtocol1,
+                                         true);
+      break;
     case CURL_SSLVERSION_TLSv1:
     case CURL_SSLVERSION_TLSv1_0:
       (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
@@ -1175,13 +1185,9 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
       }
       break;
     case CURL_SSLVERSION_SSLv3:
-      err = SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
+      (void)SSLSetProtocolVersionEnabled(connssl->ssl_ctx,
                                          kSSLProtocol3,
                                          true);
-      if(err != noErr) {
-        failf(data, "Your version of the OS does not support SSLv3");
-        return CURLE_SSL_CONNECT_ERROR;
-      }
       break;
   }
 #endif /* CURL_BUILD_MAC_10_8 || CURL_BUILD_IOS */
@@ -1468,7 +1474,7 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
 
   /* Check if there's a cached ID we can/should use here! */
   if(!Curl_ssl_getsessionid(conn, (void **)&ssl_sessionid,
-                            &ssl_sessionid_len)) {
+    &ssl_sessionid_len)) {
     /* we got a session id, use it! */
     err = SSLSetPeerID(connssl->ssl_ctx, ssl_sessionid, ssl_sessionid_len);
     if(err != noErr) {
@@ -1481,23 +1487,20 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
   /* If there isn't one, then let's make one up! This has to be done prior
      to starting the handshake. */
   else {
-    CURLcode result;
-    ssl_sessionid =
-      aprintf("%s:%d:%d:%s:%hu", data->set.str[STRING_SSL_CAFILE],
-              data->set.ssl.verifypeer, data->set.ssl.verifyhost,
-              conn->host.name, conn->remote_port);
-    ssl_sessionid_len = strlen(ssl_sessionid);
+    CURLcode retcode;
 
+    ssl_sessionid = malloc(256*sizeof(char));
+    ssl_sessionid_len = snprintf(ssl_sessionid, 256, "curl:%s:%hu",
+      conn->host.name, conn->remote_port);
     err = SSLSetPeerID(connssl->ssl_ctx, ssl_sessionid, ssl_sessionid_len);
     if(err != noErr) {
       failf(data, "SSL: SSLSetPeerID() failed: OSStatus %d", err);
       return CURLE_SSL_CONNECT_ERROR;
     }
-
-    result = Curl_ssl_addsessionid(conn, ssl_sessionid, ssl_sessionid_len);
-    if(result) {
+    retcode = Curl_ssl_addsessionid(conn, ssl_sessionid, ssl_sessionid_len);
+    if(retcode!= CURLE_OK) {
       failf(data, "failed to store ssl session");
-      return result;
+      return retcode;
     }
   }
 
@@ -1522,42 +1525,43 @@ static CURLcode darwinssl_connect_step1(struct connectdata *conn,
   return CURLE_OK;
 }
 
-static long pem_to_der(const char *in, unsigned char **out, size_t *outlen)
+static int pem_to_der(const char *in, unsigned char **out, size_t *outlen)
 {
-  char *sep_start, *sep_end, *cert_start, *cert_end;
+  char *sep, *start, *end;
   size_t i, j, err;
   size_t len;
   unsigned char *b64;
 
-  /* Jump through the separators at the beginning of the certificate. */
-  sep_start = strstr(in, "-----");
-  if(sep_start == NULL)
-    return 0;
-  cert_start = strstr(sep_start + 1, "-----");
-  if(cert_start == NULL)
+  /* Jump through the separators in the first line. */
+  sep = strstr(in, "-----");
+  if(sep == NULL)
+    return -1;
+  sep = strstr(sep + 1, "-----");
+  if(sep == NULL)
     return -1;
 
-  cert_start += 5;
+  start = sep + 5;
 
-  /* Find separator after the end of the certificate. */
-  cert_end = strstr(cert_start, "-----");
-  if(cert_end == NULL)
+  /* Find beginning of last line separator. */
+  end = strstr(start, "-----");
+  if(end == NULL)
     return -1;
 
-  sep_end = strstr(cert_end + 1, "-----");
-  if(sep_end == NULL)
+  len = end - start;
+  *out = malloc(len);
+  if(!*out)
     return -1;
-  sep_end += 5;
 
-  len = cert_end - cert_start;
   b64 = malloc(len + 1);
-  if(!b64)
+  if(!b64) {
+    free(*out);
     return -1;
+  }
 
   /* Create base64 string without linefeeds. */
   for(i = 0, j = 0; i < len; i++) {
-    if(cert_start[i] != '\r' && cert_start[i] != '\n')
-      b64[j++] = cert_start[i];
+    if(start[i] != '\r' && start[i] != '\n')
+      b64[j++] = start[i];
   }
   b64[j] = '\0';
 
@@ -1568,14 +1572,15 @@ static long pem_to_der(const char *in, unsigned char **out, size_t *outlen)
     return -1;
   }
 
-  return sep_end - in;
+  return 0;
 }
 
 static int read_cert(const char *file, unsigned char **out, size_t *outlen)
 {
   int fd;
   ssize_t n, len = 0, cap = 512;
-  unsigned char buf[cap], *data;
+  size_t derlen;
+  unsigned char buf[cap], *data, *der;
 
   fd = open(file, 0);
   if(fd < 0)
@@ -1613,6 +1618,16 @@ static int read_cert(const char *file, unsigned char **out, size_t *outlen)
   }
   data[len] = '\0';
 
+  /*
+   * Check if the certificate is in PEM format, and convert it to DER. If this
+   * fails, we assume the certificate is in DER format.
+   */
+  if(pem_to_der((const char *)data, &der, &derlen) == 0) {
+    free(data);
+    data = der;
+    len = derlen;
+  }
+
   *out = data;
   *outlen = len;
 
@@ -1648,141 +1663,47 @@ static int sslerr_to_curlerr(struct SessionHandle *data, int err)
   }
 }
 
-static int append_cert_to_array(struct SessionHandle *data,
-                                unsigned char *buf, size_t buflen,
-                                CFMutableArrayRef array)
-{
-    CFDataRef certdata = CFDataCreate(kCFAllocatorDefault, buf, buflen);
-    if(!certdata) {
-      failf(data, "SSL: failed to allocate array for CA certificate");
-      return CURLE_OUT_OF_MEMORY;
-    }
-
-    SecCertificateRef cacert =
-      SecCertificateCreateWithData(kCFAllocatorDefault, certdata);
-    CFRelease(certdata);
-    if(!cacert) {
-      failf(data, "SSL: failed to create SecCertificate from CA certificate");
-      return CURLE_SSL_CACERT;
-    }
-
-    /* Check if cacert is valid. */
-    CFStringRef subject = CopyCertSubject(cacert);
-    if(subject) {
-      char subject_cbuf[128];
-      memset(subject_cbuf, 0, 128);
-      if(!CFStringGetCString(subject,
-                            subject_cbuf,
-                            128,
-                            kCFStringEncodingUTF8)) {
-        CFRelease(cacert);
-        failf(data, "SSL: invalid CA certificate subject");
-        return CURLE_SSL_CACERT;
-      }
-      CFRelease(subject);
-    }
-    else {
-      CFRelease(cacert);
-      failf(data, "SSL: invalid CA certificate");
-      return CURLE_SSL_CACERT;
-    }
-
-    CFArrayAppendValue(array, cacert);
-    CFRelease(cacert);
-
-    return CURLE_OK;
-}
-
 static int verify_cert(const char *cafile, struct SessionHandle *data,
                        SSLContextRef ctx)
 {
-  int n = 0, rc;
-  long res;
-  unsigned char *certbuf, *der;
-  size_t buflen, derlen, offset = 0;
-
+  unsigned char *certbuf;
+  size_t buflen;
   if(read_cert(cafile, &certbuf, &buflen) < 0) {
     failf(data, "SSL: failed to read or invalid CA certificate");
     return CURLE_SSL_CACERT;
   }
 
-  /*
-   * Certbuf now contains the contents of the certificate file, which can be
-   * - a single DER certificate,
-   * - a single PEM certificate or
-   * - a bunch of PEM certificates (certificate bundle).
-   *
-   * Go through certbuf, and convert any PEM certificate in it into DER
-   * format.
-   */
-  CFMutableArrayRef array = CFArrayCreateMutable(kCFAllocatorDefault, 0,
-                                                 &kCFTypeArrayCallBacks);
-  if(array == NULL) {
-    free(certbuf);
-    failf(data, "SSL: out of memory creating CA certificate array");
+  CFDataRef certdata = CFDataCreate(kCFAllocatorDefault, certbuf, buflen);
+  free(certbuf);
+  if(!certdata) {
+    failf(data, "SSL: failed to allocate array for CA certificate");
     return CURLE_OUT_OF_MEMORY;
   }
 
-  while(offset < buflen) {
-    n++;
-
-    /*
-     * Check if the certificate is in PEM format, and convert it to DER. If
-     * this fails, we assume the certificate is in DER format.
-     */
-    res = pem_to_der((const char *)certbuf + offset, &der, &derlen);
-    if(res < 0) {
-      free(certbuf);
-      CFRelease(array);
-      failf(data, "SSL: invalid CA certificate #%d (offset %d) in bundle",
-            n, offset);
-      return CURLE_SSL_CACERT;
-    }
-    offset += res;
-
-    if(res == 0 && offset == 0) {
-      /* This is not a PEM file, probably a certificate in DER format. */
-      rc = append_cert_to_array(data, certbuf, buflen, array);
-      free(certbuf);
-      if(rc != CURLE_OK) {
-        CFRelease(array);
-        return rc;
-      }
-      break;
-    }
-    else if(res == 0) {
-      /* No more certificates in the bundle. */
-      free(certbuf);
-      break;
-    }
-
-    rc = append_cert_to_array(data, der, derlen, array);
-    free(der);
-    if(rc != CURLE_OK) {
-      free(certbuf);
-      CFRelease(array);
-      return rc;
-    }
+  SecCertificateRef cacert = SecCertificateCreateWithData(kCFAllocatorDefault,
+                                                          certdata);
+  CFRelease(certdata);
+  if(!cacert) {
+    failf(data, "SSL: failed to create SecCertificate from CA certificate");
+    return CURLE_SSL_CACERT;
   }
 
   SecTrustRef trust;
   OSStatus ret = SSLCopyPeerTrust(ctx, &trust);
   if(trust == NULL) {
     failf(data, "SSL: error getting certificate chain");
-    CFRelease(array);
     return CURLE_OUT_OF_MEMORY;
   }
   else if(ret != noErr) {
-    CFRelease(array);
     return sslerr_to_curlerr(data, ret);
   }
 
+  CFMutableArrayRef array = CFArrayCreateMutable(kCFAllocatorDefault, 0,
+                                                 &kCFTypeArrayCallBacks);
+  CFArrayAppendValue(array, cacert);
+  CFRelease(cacert);
+
   ret = SecTrustSetAnchorCertificates(trust, array);
-  if(ret != noErr) {
-    CFRelease(trust);
-    return sslerr_to_curlerr(data, ret);
-  }
-  ret = SecTrustSetAnchorCertificatesOnly(trust, true);
   if(ret != noErr) {
     CFRelease(trust);
     return sslerr_to_curlerr(data, ret);
@@ -1799,6 +1720,8 @@ static int verify_cert(const char *cafile, struct SessionHandle *data,
   switch (trust_eval) {
     case kSecTrustResultUnspecified:
     case kSecTrustResultProceed:
+      infof(data, "SSL: certificate verification succeeded (result: %d)",
+            trust_eval);
       return CURLE_OK;
 
     case kSecTrustResultRecoverableTrustFailure:
@@ -2076,7 +1999,7 @@ darwinssl_connect_common(struct connectdata *conn,
                          bool nonblocking,
                          bool *done)
 {
-  CURLcode result;
+  CURLcode retcode;
   struct SessionHandle *data = conn->data;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   curl_socket_t sockfd = conn->sock[sockindex];
@@ -2098,10 +2021,9 @@ darwinssl_connect_common(struct connectdata *conn,
       failf(data, "SSL connection timeout");
       return CURLE_OPERATION_TIMEDOUT;
     }
-
-    result = darwinssl_connect_step1(conn, sockindex);
-    if(result)
-      return result;
+    retcode = darwinssl_connect_step1(conn, sockindex);
+    if(retcode)
+      return retcode;
   }
 
   while(ssl_connect_2 == connssl->connecting_state ||
@@ -2118,8 +2040,8 @@ darwinssl_connect_common(struct connectdata *conn,
     }
 
     /* if ssl is expecting something, check if it's available. */
-    if(connssl->connecting_state == ssl_connect_2_reading ||
-       connssl->connecting_state == ssl_connect_2_writing) {
+    if(connssl->connecting_state == ssl_connect_2_reading
+       || connssl->connecting_state == ssl_connect_2_writing) {
 
       curl_socket_t writefd = ssl_connect_2_writing ==
       connssl->connecting_state?sockfd:CURL_SOCKET_BAD;
@@ -2152,23 +2074,23 @@ darwinssl_connect_common(struct connectdata *conn,
      * before step2 has completed while ensuring that a client using select()
      * or epoll() will always have a valid fdset to wait on.
      */
-    result = darwinssl_connect_step2(conn, sockindex);
-    if(result || (nonblocking &&
-                  (ssl_connect_2 == connssl->connecting_state ||
-                   ssl_connect_2_reading == connssl->connecting_state ||
-                   ssl_connect_2_writing == connssl->connecting_state)))
-      return result;
+    retcode = darwinssl_connect_step2(conn, sockindex);
+    if(retcode || (nonblocking &&
+                   (ssl_connect_2 == connssl->connecting_state ||
+                    ssl_connect_2_reading == connssl->connecting_state ||
+                    ssl_connect_2_writing == connssl->connecting_state)))
+      return retcode;
 
   } /* repeat step2 until all transactions are done. */
 
 
-  if(ssl_connect_3 == connssl->connecting_state) {
-    result = darwinssl_connect_step3(conn, sockindex);
-    if(result)
-      return result;
+  if(ssl_connect_3==connssl->connecting_state) {
+    retcode = darwinssl_connect_step3(conn, sockindex);
+    if(retcode)
+      return retcode;
   }
 
-  if(ssl_connect_done == connssl->connecting_state) {
+  if(ssl_connect_done==connssl->connecting_state) {
     connssl->state = ssl_connection_complete;
     conn->recv[sockindex] = darwinssl_recv;
     conn->send[sockindex] = darwinssl_send;
@@ -2195,13 +2117,13 @@ CURLcode
 Curl_darwinssl_connect(struct connectdata *conn,
                        int sockindex)
 {
-  CURLcode result;
+  CURLcode retcode;
   bool done = FALSE;
 
-  result = darwinssl_connect_common(conn, sockindex, FALSE, &done);
+  retcode = darwinssl_connect_common(conn, sockindex, FALSE, &done);
 
-  if(result)
-    return result;
+  if(retcode)
+    return retcode;
 
   DEBUGASSERT(done);
 
@@ -2345,8 +2267,9 @@ bool Curl_darwinssl_data_pending(const struct connectdata *conn,
     return false;
 }
 
-int Curl_darwinssl_random(unsigned char *entropy,
-                          size_t length)
+void Curl_darwinssl_random(struct SessionHandle *data,
+                           unsigned char *entropy,
+                           size_t length)
 {
   /* arc4random_buf() isn't available on cats older than Lion, so let's
      do this manually for the benefit of the older cats. */
@@ -2360,7 +2283,7 @@ int Curl_darwinssl_random(unsigned char *entropy,
     random_number >>= 8;
   }
   i = random_number = 0;
-  return 0;
+  (void)data;
 }
 
 void Curl_darwinssl_md5sum(unsigned char *tmp, /* input */

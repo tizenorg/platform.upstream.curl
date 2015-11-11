@@ -69,6 +69,7 @@
 #define HAVE_SETMODE           1
 #define HAVE_SIGNAL            1
 #define HAVE_SOCKET            1
+#define HAVE_SPNEGO            1
 #define HAVE_STRDUP            1
 #define HAVE_STRICMP           1
 #define HAVE_STRTOLL           1

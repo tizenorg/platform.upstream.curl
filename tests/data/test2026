@@ -151,10 +151,6 @@ Finally, this is the real page!
 <server>
 http
 </server>
-<features>
-!SSPI
-crypto
-</features>
 <tool>
 libauthretry
 </tool>
