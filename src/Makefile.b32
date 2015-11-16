@@ -27,7 +27,7 @@ ZLIB_PATH = ..\..\zlib-1.2.8
 
 # Edit the path below to point to the base of your OpenSSL package.
 !ifndef OPENSSL_PATH
-OPENSSL_PATH = ..\..\openssl-0.9.8y
+OPENSSL_PATH = ..\..\openssl-0.9.8zc
 !endif
 
 # Set program's name
@@ -81,7 +81,7 @@ LINKLIB  = $(LINKLIB) $(OPENSSL_PATH)\out32\ssleay32.lib $(OPENSSL_PATH)\out32\l
 # Makefile.inc provides the CSOURCES and HHEADERS defines
 !include Makefile.inc
 
-CSOURCES = $(CURL_CFILES) $(CURLX_ONES:../lib/=)
+CSOURCES = $(CURL_CFILES) $(CURLX_CFILES:../lib/=)
 OBJECTS  = $(CSOURCES:.c=.obj)
 PREPROCESSED = $(CSOURCES:.c=.int)
 
