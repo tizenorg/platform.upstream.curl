@@ -66,7 +66,7 @@ cp %{SOURCE1001} .
 
 export CPPFLAGS="-DHAVE_PK11_CREATEGENERICOBJECT"
 
-%if "%{?tizen_profile_name}" == "tv"
+%if "%{?profile}" == "tv"
 CFLAGS+=" -DTIZEN_TV_EXT"
 %reconfigure --without-nss --without-gnutls --with-openssl --disable-ipv6 \
 %else
