@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -33,27 +33,30 @@
 #include "curl_base64.h"
 #include "curl_sasl.h"
 #include "http_negotiate.h"
-#include "curl_multibyte.h"
-#include "curl_printf.h"
-
-/* The last #include files should be: */
 #include "curl_memory.h"
+#include "curl_multibyte.h"
+
+#define _MPRINTF_REPLACE /* use our functions only */
+#include <curl/mprintf.h>
+
+/* The last #include file should be: */
 #include "memdebug.h"
 
-CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
-                              const char *header)
+/* returning zero (0) means success, everything else is treated as "failure"
+   with no care exactly what the failure was */
+int Curl_input_negotiate(struct connectdata *conn, bool proxy,
+                         const char *header)
 {
-  struct SessionHandle *data = conn->data;
   BYTE              *input_token = NULL;
   SecBufferDesc     out_buff_desc;
   SecBuffer         out_sec_buff;
   SecBufferDesc     in_buff_desc;
   SecBuffer         in_sec_buff;
-  SECURITY_STATUS   status;
-  unsigned long     attrs;
-  TimeStamp         expiry; /* For Windows 9x compatibility of SSPI calls */
+  unsigned long     context_attributes;
+  TimeStamp         expiry;
+  int ret;
   size_t len = 0, input_token_len = 0;
-  CURLcode result;
+  CURLcode error;
 
   /* Point to the username and password */
   const char *userp;
@@ -65,12 +68,12 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
   if(proxy) {
     userp = conn->proxyuser;
     passwdp = conn->proxypasswd;
-    neg_ctx = &data->state.proxyneg;
+    neg_ctx = &conn->data->state.proxyneg;
   }
   else {
     userp = conn->user;
     passwdp = conn->passwd;
-    neg_ctx = &data->state.negotiate;
+    neg_ctx = &conn->data->state.negotiate;
   }
 
   /* Not set means empty */
@@ -84,31 +87,29 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
     /* We finished successfully our part of authentication, but server
      * rejected it (since we're again here). Exit with an error since we
      * can't invent anything better */
-    Curl_cleanup_negotiate(data);
-    return CURLE_LOGIN_DENIED;
+    Curl_cleanup_negotiate(conn->data);
+    return -1;
   }
 
   if(!neg_ctx->server_name) {
     /* Check proxy auth requested but no given proxy name */
     if(proxy && !conn->proxy.name)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
+      return -1;
 
     /* Generate our SPN */
-    neg_ctx->server_name = Curl_sasl_build_spn(
-      proxy ? data->set.str[STRING_PROXY_SERVICE_NAME] :
-      data->set.str[STRING_SERVICE_NAME],
-      proxy ? conn->proxy.name : conn->host.name);
+    neg_ctx->server_name = Curl_sasl_build_spn("HTTP",
+                                                proxy ? conn->proxy.name :
+                                                        conn->host.name);
     if(!neg_ctx->server_name)
-      return CURLE_OUT_OF_MEMORY;
+      return -1;
   }
 
   if(!neg_ctx->output_token) {
     PSecPkgInfo SecurityPackage;
-    status = s_pSecFn->QuerySecurityPackageInfo((TCHAR *)
-                                                TEXT(SP_NAME_NEGOTIATE),
-                                                &SecurityPackage);
-    if(status != SEC_E_OK)
-      return CURLE_NOT_BUILT_IN;
+    ret = s_pSecFn->QuerySecurityPackageInfo((TCHAR *) TEXT(SP_NAME_NEGOTIATE),
+                                             &SecurityPackage);
+    if(ret != SEC_E_OK)
+      return -1;
 
     /* Allocate input and output buffers according to the max token size
        as indicated by the security package */
@@ -128,7 +129,7 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
     if(neg_ctx->context) {
       /* The server rejected our authentication and hasn't suppled any more
          negotiation mechanisms */
-      return CURLE_LOGIN_DENIED;
+      return -1;
     }
 
     /* We have to acquire credentials and allocate memory for the context */
@@ -136,13 +137,13 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
     neg_ctx->context = malloc(sizeof(CtxtHandle));
 
     if(!neg_ctx->credentials || !neg_ctx->context)
-      return CURLE_OUT_OF_MEMORY;
+      return -1;
 
     if(userp && *userp) {
       /* Populate our identity structure */
-      result = Curl_create_sspi_identity(userp, passwdp, &neg_ctx->identity);
-      if(result)
-        return result;
+      error = Curl_create_sspi_identity(userp, passwdp, &neg_ctx->identity);
+      if(error)
+        return -1;
 
       /* Allow proper cleanup of the identity structure */
       neg_ctx->p_identity = &neg_ctx->identity;
@@ -159,21 +160,14 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
                                          neg_ctx->p_identity, NULL, NULL,
                                          neg_ctx->credentials, &expiry);
     if(neg_ctx->status != SEC_E_OK)
-      return CURLE_LOGIN_DENIED;
+      return -1;
   }
   else {
-    result = Curl_base64_decode(header,
-                                (unsigned char **)&input_token,
-                                &input_token_len);
-    if(result)
-      return result;
-
-    if(!input_token_len) {
-      infof(data,
-            "Negotiate handshake failure (empty challenge message)\n");
-
-      return CURLE_BAD_CONTENT_ENCODING;
-    }
+    error = Curl_base64_decode(header,
+                               (unsigned char **)&input_token,
+                               &input_token_len);
+    if(error || !input_token_len)
+      return -1;
   }
 
   /* Setup the "output" security buffer */
@@ -206,26 +200,27 @@ CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
     0,
     neg_ctx->context,
     &out_buff_desc,
-    &attrs,
+    &context_attributes,
     &expiry);
 
-  free(input_token);
+  Curl_safefree(input_token);
 
   if(GSS_ERROR(neg_ctx->status))
-    return CURLE_OUT_OF_MEMORY;
+    return -1;
 
   if(neg_ctx->status == SEC_I_COMPLETE_NEEDED ||
      neg_ctx->status == SEC_I_COMPLETE_AND_CONTINUE) {
     neg_ctx->status = s_pSecFn->CompleteAuthToken(neg_ctx->context,
                                                   &out_buff_desc);
     if(GSS_ERROR(neg_ctx->status))
-      return CURLE_RECV_ERROR;
+      return -1;
   }
 
   neg_ctx->output_token_length = out_sec_buff.cbBuffer;
 
-  return CURLE_OK;
+  return 0;
 }
+
 
 CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy)
 {

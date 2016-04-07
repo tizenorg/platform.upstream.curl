@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -24,7 +24,7 @@
 
 #include "curl_setup.h"
 
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
 /*
  * This header should only be needed to get included by vtls.c and openssl.c
  */
@@ -72,15 +72,6 @@ void Curl_ossl_md5sum(unsigned char *tmp, /* input */
                       size_t tmplen,
                       unsigned char *md5sum /* output */,
                       size_t unused);
-void Curl_ossl_sha256sum(const unsigned char *tmp, /* input */
-                      size_t tmplen,
-                      unsigned char *sha256sum /* output */,
-                      size_t unused);
-
-bool Curl_ossl_cert_status_request(void);
-
-/* Set the API backend definition to OpenSSL */
-#define CURL_SSL_BACKEND CURLSSLBACKEND_OPENSSL
 
 /* this backend supports the CAPATH option */
 #define have_curlssl_ca_path 1
@@ -108,13 +99,22 @@ bool Curl_ossl_cert_status_request(void);
 #define curlssl_data_pending(x,y) Curl_ossl_data_pending(x,y)
 #define curlssl_random(x,y,z) Curl_ossl_random(x,y,z)
 #define curlssl_md5sum(a,b,c,d) Curl_ossl_md5sum(a,b,c,d)
-#ifndef OPENSSL_NO_SHA256
-#define curlssl_sha256sum(a,b,c,d) Curl_ossl_sha256sum(a,b,c,d)
-#endif
-#define curlssl_cert_status_request() Curl_ossl_cert_status_request()
+#define CURL_SSL_BACKEND CURLSSLBACKEND_OPENSSL
 
+#ifdef TIZEN_TV_EXT
 #define DEFAULT_CIPHER_SELECTION \
-  "ALL:!EXPORT:!EXPORT40:!EXPORT56:!aNULL:!LOW:!RC4:@STRENGTH"
+"ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:" \
+"DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-AES256-SHA:" \
+"ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-RSA-AES128-GCM-SHA256:" \
+"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:" \
+"DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:" \
+"AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:" \
+"ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:" \
+"EDH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:" \
+"DES-CBC3-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
+#else
+#define DEFAULT_CIPHER_SELECTION "ALL!EXPORT!EXPORT40!EXPORT56!aNULL!LOW!RC4"
+#endif
 
-#endif /* USE_OPENSSL */
+#endif /* USE_SSLEAY */
 #endif /* HEADER_CURL_SSLUSE_H */
