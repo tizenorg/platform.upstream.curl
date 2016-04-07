@@ -7,10 +7,10 @@
  * rewrite to work around the paragraph 2 in the BSD licenses as explained
  * below.
  *
- * Copyright (c) 1998, 1999 Kungliga Tekniska Högskolan
+ * Copyright (c) 1998, 1999, 2013 Kungliga Tekniska Högskolan
  * (Royal Institute of Technology, Stockholm, Sweden).
  *
- * Copyright (C) 2001 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2001 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * All rights reserved.
  *
@@ -109,12 +109,19 @@ static char level_to_char(int level) {
   return 'P';
 }
 
+static const struct Curl_sec_client_mech * const mechs[] = {
+#ifdef HAVE_GSSAPI
+  &Curl_krb5_client_mech,
+#endif
+  NULL
+};
+
 /* Send an FTP command defined by |message| and the optional arguments. The
    function returns the ftp_code. If an error occurs, -1 is returned. */
 static int ftp_send_command(struct connectdata *conn, const char *message, ...)
 {
   int ftp_code;
-  ssize_t nread=0;
+  ssize_t nread;
   va_list args;
   char print_buffer[50];
 
@@ -359,7 +366,7 @@ int Curl_sec_read_msg(struct connectdata *conn, char *buffer,
      int */
   int decoded_len;
   char *buf;
-  int ret_code = 0;
+  int ret_code;
   size_t decoded_sz = 0;
   CURLcode error;
 
@@ -388,13 +395,13 @@ int Curl_sec_read_msg(struct connectdata *conn, char *buffer,
   }
 
   buf[decoded_len] = '\0';
-  if(decoded_len <= 3)
-    /* suspiciously short */
-    return 0;
-
-  if(buf[3] != '-')
-    /* safe to ignore return code */
+  DEBUGASSERT(decoded_len > 3);
+  if(buf[3] == '-')
+    ret_code = 0;
+  else {
+    /* Check for error? */
     (void)sscanf(buf, "%d", &ret_code);
+  }
 
   if(buf[decoded_len - 1] == '\n')
     buf[decoded_len - 1] = '\0';
@@ -437,8 +444,8 @@ static int sec_set_protection_level(struct connectdata *conn)
 
     pbsz = strstr(conn->data->state.buffer, "PBSZ=");
     if(pbsz) {
-      /* ignore return code, use default value if it fails */
-      (void)sscanf(pbsz, "PBSZ=%u", &buffer_size);
+      /* FIXME: Checks for errors in sscanf? */
+      sscanf(pbsz, "PBSZ=%u", &buffer_size);
       if(buffer_size < conn->buffer_size)
         conn->buffer_size = buffer_size;
     }
@@ -477,63 +484,72 @@ static CURLcode choose_mech(struct connectdata *conn)
 {
   int ret;
   struct SessionHandle *data = conn->data;
+  const struct Curl_sec_client_mech * const *mech;
   void *tmp_allocation;
-  const struct Curl_sec_client_mech *mech = &Curl_krb5_client_mech;
+  const char *mech_name;
 
-  tmp_allocation = realloc(conn->app_data, mech->size);
-  if(tmp_allocation == NULL) {
-    failf(data, "Failed realloc of size %u", mech->size);
-    mech = NULL;
-    return CURLE_OUT_OF_MEMORY;
-  }
-  conn->app_data = tmp_allocation;
-
-  if(mech->init) {
-    ret = mech->init(conn->app_data);
-    if(ret) {
-      infof(data, "Failed initialization for %s. Skipping it.\n",
-            mech->name);
-      return CURLE_FAILED_INIT;
+  for(mech = mechs; (*mech); ++mech) {
+    mech_name = (*mech)->name;
+    /* We have no mechanism with a NULL name but keep this check */
+    DEBUGASSERT(mech_name != NULL);
+    if(mech_name == NULL) {
+      infof(data, "Skipping mechanism with empty name (%p)\n", (void *)mech);
+      continue;
     }
-  }
+    tmp_allocation = realloc(conn->app_data, (*mech)->size);
+    if(tmp_allocation == NULL) {
+      failf(data, "Failed realloc of size %u", (*mech)->size);
+      mech = NULL;
+      return CURLE_OUT_OF_MEMORY;
+    }
+    conn->app_data = tmp_allocation;
 
-  infof(data, "Trying mechanism %s...\n", mech->name);
-  ret = ftp_send_command(conn, "AUTH %s", mech->name);
-  if(ret < 0)
-    /* FIXME: This error is too generic but it is OK for now. */
-    return CURLE_COULDNT_CONNECT;
-
-  if(ret/100 != 3) {
-    switch(ret) {
-    case 504:
-      infof(data, "Mechanism %s is not supported by the server (server "
-            "returned ftp code: 504).\n", mech->name);
-      break;
-    case 534:
-      infof(data, "Mechanism %s was rejected by the server (server returned "
-            "ftp code: 534).\n", mech->name);
-      break;
-    default:
-      if(ret/100 == 5) {
-        infof(data, "server does not support the security extensions\n");
-        return CURLE_USE_SSL_FAILED;
+    if((*mech)->init) {
+      ret = (*mech)->init(conn->app_data);
+      if(ret != 0) {
+        infof(data, "Failed initialization for %s. Skipping it.\n", mech_name);
+        continue;
       }
-      break;
     }
-    return CURLE_LOGIN_DENIED;
-  }
 
-  /* Authenticate */
-  ret = mech->auth(conn->app_data, conn);
+    infof(data, "Trying mechanism %s...\n", mech_name);
+    ret = ftp_send_command(conn, "AUTH %s", mech_name);
+    if(ret < 0)
+      /* FIXME: This error is too generic but it is OK for now. */
+      return CURLE_COULDNT_CONNECT;
 
-  if(ret != AUTH_CONTINUE) {
-    if(ret != AUTH_OK) {
+    if(ret/100 != 3) {
+      switch(ret) {
+      case 504:
+        infof(data, "Mechanism %s is not supported by the server (server "
+                    "returned ftp code: 504).\n", mech_name);
+        break;
+      case 534:
+        infof(data, "Mechanism %s was rejected by the server (server returned "
+                    "ftp code: 534).\n", mech_name);
+        break;
+      default:
+        if(ret/100 == 5) {
+          infof(data, "server does not support the security extensions\n");
+          return CURLE_USE_SSL_FAILED;
+        }
+        break;
+      }
+      continue;
+    }
+
+    /* Authenticate */
+    ret = (*mech)->auth(conn->app_data, conn);
+
+    if(ret == AUTH_CONTINUE)
+      continue;
+    else if(ret != AUTH_OK) {
       /* Mechanism has dumped the error to stderr, don't error here. */
       return -1;
     }
     DEBUGASSERT(ret == AUTH_OK);
 
-    conn->mech = mech;
+    conn->mech = *mech;
     conn->sec_complete = 1;
     conn->recv[FIRSTSOCKET] = sec_recv;
     conn->send[FIRSTSOCKET] = sec_send;
@@ -543,9 +559,10 @@ static CURLcode choose_mech(struct connectdata *conn)
     /* Set the requested protection level */
     /* BLOCKING */
     (void)sec_set_protection_level(conn);
+    break;
   }
 
-  return CURLE_OK;
+  return *mech != NULL ? CURLE_OK : CURLE_FAILED_INIT;
 }
 
 CURLcode
@@ -560,8 +577,10 @@ Curl_sec_end(struct connectdata *conn)
 {
   if(conn->mech != NULL && conn->mech->end)
     conn->mech->end(conn->app_data);
-  free(conn->app_data);
-  conn->app_data = NULL;
+  if(conn->app_data) {
+    free(conn->app_data);
+    conn->app_data = NULL;
+  }
   if(conn->in_buffer.data) {
     free(conn->in_buffer.data);
     conn->in_buffer.data = NULL;

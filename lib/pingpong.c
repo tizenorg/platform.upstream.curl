@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -34,7 +34,9 @@
 #include "multiif.h"
 #include "non-ascii.h"
 #include "vtls/vtls.h"
-#include "curl_printf.h"
+
+#define _MPRINTF_REPLACE /* use our functions only */
+#include <curl/mprintf.h>
 
 #include "curl_memory.h"
 /* The last #include file should be: */
@@ -493,8 +495,10 @@ CURLcode Curl_pp_flushsend(struct pingpong *pp)
 
 CURLcode Curl_pp_disconnect(struct pingpong *pp)
 {
-  free(pp->cache);
-  pp->cache = NULL;
+  if(pp->cache) {
+    free(pp->cache);
+    pp->cache = NULL;
+  }
   return CURLE_OK;
 }
 

@@ -7,7 +7,6 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
  *
  * This software is licensed as described in the file COPYING, which
@@ -24,30 +23,18 @@
  ***************************************************************************/
 
 struct conncache {
-  struct curl_hash hash;
+  struct curl_hash *hash;
   size_t num_connections;
   long next_connection_id;
   struct timeval last_cleanup;
 };
 
-#define BUNDLE_NO_MULTIUSE -1
-#define BUNDLE_UNKNOWN     0  /* initial value */
-#define BUNDLE_PIPELINING  1
-#define BUNDLE_MULTIPLEX   2
-
-struct connectbundle {
-  int multiuse;                 /* supports multi-use */
-  size_t num_connections;       /* Number of connections in the bundle */
-  struct curl_llist *conn_list; /* The connectdata members of the bundle */
-};
-
-int Curl_conncache_init(struct conncache *, int size);
+struct conncache *Curl_conncache_init(int size);
 
 void Curl_conncache_destroy(struct conncache *connc);
 
-/* return the correct bundle, to a host or a proxy */
-struct connectbundle *Curl_conncache_find_bundle(struct connectdata *conn,
-                                                 struct conncache *connc);
+struct connectbundle *Curl_conncache_find_bundle(struct conncache *connc,
+                                                 char *hostname);
 
 CURLcode Curl_conncache_add_conn(struct conncache *connc,
                                  struct connectdata *conn);

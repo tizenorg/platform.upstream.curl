@@ -50,7 +50,7 @@ Cocoa
 D
 
   Written by Kenneth Bogert
-  http://dlang.org/library/std/net/curl.html
+  http://curl.haxx.se/libcurl/d/
 
 Dylan
 
@@ -60,7 +60,7 @@ Dylan
 Eiffel
 
   Written by Eiffel Software
-  https://room.eiffel.com/library/curl
+  http://curl.haxx.se/libcurl/eiffel/
 
 Euphoria
 
@@ -78,7 +78,7 @@ Ferite
 
 Gambas
 
-  http://gambas.sourceforge.net/
+  http://gambas.sourceforge.net
 
 glib/GTK+
 
@@ -90,11 +90,6 @@ Guile:
   Written by Michael L. Gran
   http://www.lonelycactus.com/guile-curl.html
 
-Harbour
-
-  Written by Viktor SzakÃ¡ts
-  https://github.com/vszakats/harbour-core/tree/master/contrib/hbcurl
-
 Haskell
 
   Written by Galois, Inc
@@ -102,7 +97,8 @@ Haskell
 
 Java
 
-  https://github.com/pjlegato/curl-java
+  Maintained by [blank]
+  http://curl.haxx.se/libcurl/java/
 
 Julia
 
@@ -119,7 +115,7 @@ Lua
   luacurl by Alexander Marinov
   http://luacurl.luaforge.net/
 
-  Lua-cURL by JÃ¼rgen HÃ¶tzel
+  Lua-cURL by Jürgen Hötzel
   http://luaforge.net/projects/lua-curl/
 
 Mono
@@ -130,7 +126,7 @@ Mono
 .NET
 
   libcurl-net by Jeffrey Phillips
-  https://sourceforge.net/projects/libcurl-net/
+  http://sourceforge.net/projects/libcurl-net/
 
 node.js
 
@@ -145,7 +141,7 @@ Object-Pascal
 O'Caml
 
   Written by Lars Nilsson
-  https://sourceforge.net/projects/ocurl/
+  http://sourceforge.net/projects/ocurl/
 
 Pascal
 
@@ -154,13 +150,13 @@ Pascal
 
 Perl
 
-  Maintained by Cris Bailiff and BÃ¡lint Szilakszi
-  https://github.com/szbalint/WWW--Curl
+  Maintained by Cris Bailiff
+  http://curl.haxx.se/libcurl/perl/
 
 PHP
 
   Written by Sterling Hughes
-  https://php.net/curl
+  http://curl.haxx.se/libcurl/php/
 
 PostgreSQL
 
@@ -174,7 +170,8 @@ Python
 
 R
 
-  http://cran.r-project.org/package=curl
+  RCurl by Duncan Temple Lang
+  http://www.omegahat.org/RCurl/
 
 Rexx
 
@@ -195,15 +192,10 @@ Ruby
   ruby-curl-multi - written by Kristjan Petursson and Keith Rarick
   http://curl-multi.rubyforge.org/
 
-Rust
-
-  curl-rust - by Carl Lerche
-  https://github.com/carllerche/curl-rust
-
 Scheme
 
   Bigloo binding by Kirill Lisovsky
-  http://www.metapaper.net/lisovsky/web/curl/
+  http://curl.haxx.se/libcurl/scheme/
 
 S-Lang
 
@@ -227,13 +219,13 @@ SPL
 
 Tcl
 
-  Tclcurl by AndrÃ©s GarcÃ­a
-  http://mirror.yellow5.com/tclcurl/
+  Tclcurl by Andrés García
+  http://personal1.iddeo.es/andresgarci/tclcurl/english/docs.html
 
 Visual Basic
 
   libcurl-vb by Jeffrey Phillips
-  https://sourceforge.net/projects/libcurl-vb/
+  http://sourceforge.net/projects/libcurl-vb/
 
 Visual Foxpro
 
@@ -253,8 +245,3 @@ XBLite
 
   Written by David Szafranski
   http://perso.wanadoo.fr/xblite/libraries.html
-
-Xojo
-
-  Written by Andrew Lambert
-  https://github.com/charonn0/RB-libcURL

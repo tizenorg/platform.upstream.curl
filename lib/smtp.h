@@ -23,7 +23,6 @@
  ***************************************************************************/
 
 #include "pingpong.h"
-#include "curl_sasl.h"
 
 /****************************************************************************
  * SMTP unique setup
@@ -37,7 +36,20 @@ typedef enum {
   SMTP_STARTTLS,
   SMTP_UPGRADETLS,  /* asynchronously upgrade the connection to SSL/TLS
                        (multi mode only) */
-  SMTP_AUTH,
+  SMTP_AUTH_PLAIN,
+  SMTP_AUTH_LOGIN,
+  SMTP_AUTH_LOGIN_PASSWD,
+  SMTP_AUTH_CRAMMD5,
+  SMTP_AUTH_DIGESTMD5,
+  SMTP_AUTH_DIGESTMD5_RESP,
+  SMTP_AUTH_NTLM,
+  SMTP_AUTH_NTLM_TYPE2MSG,
+  SMTP_AUTH_GSSAPI,
+  SMTP_AUTH_GSSAPI_TOKEN,
+  SMTP_AUTH_GSSAPI_NO_DATA,
+  SMTP_AUTH_XOAUTH2,
+  SMTP_AUTH_CANCEL,
+  SMTP_AUTH_FINAL,
   SMTP_COMMAND,     /* VRFY, EXPN, NOOP, RSET and HELP */
   SMTP_MAIL,        /* MAIL FROM */
   SMTP_RCPT,        /* RCPT TO */
@@ -67,11 +79,14 @@ struct smtp_conn {
   smtpstate state;         /* Always use smtp.c:state() to change state! */
   bool ssldone;            /* Is connect() over SSL done? */
   char *domain;            /* Client address/name to send in the EHLO */
-  struct SASL sasl;        /* SASL-related storage */
+  unsigned int authmechs;  /* Accepted authentication mechanisms */
+  unsigned int prefmech;   /* Preferred authentication mechanism */
+  unsigned int authused;   /* Auth mechanism used for the connection */
   bool tls_supported;      /* StartTLS capability supported by server */
   bool size_supported;     /* If server supports SIZE extension according to
                               RFC 1870 */
   bool auth_supported;     /* AUTH capability supported by server */
+  bool mutual_auth;        /* Mutual authentication enabled (GSSAPI only) */
 };
 
 extern const struct Curl_handler Curl_handler_smtp;

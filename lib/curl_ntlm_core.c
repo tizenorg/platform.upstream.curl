@@ -33,7 +33,7 @@
 
 #if !defined(USE_WINDOWS_SSPI) || defined(USE_WIN32_CRYPTO)
 
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
 
 #  ifdef USE_OPENSSL
 #    include <openssl/des.h>
@@ -101,16 +101,17 @@
 #include "urldata.h"
 #include "non-ascii.h"
 #include "rawstr.h"
+#include "curl_memory.h"
 #include "curl_ntlm_core.h"
 #include "curl_md5.h"
 #include "curl_hmac.h"
 #include "warnless.h"
 #include "curl_endian.h"
-#include "curl_des.h"
-#include "curl_printf.h"
 
-/* The last #include files should be: */
-#include "curl_memory.h"
+#define _MPRINTF_REPLACE /* use our functions only */
+#include <curl/mprintf.h>
+
+/* The last #include file should be: */
 #include "memdebug.h"
 
 #define NTLM_HMAC_MD5_LEN     (16)
@@ -132,7 +133,7 @@ static void extend_key_56_to_64(const unsigned char *key_56, char *key)
   key[7] = (unsigned char) ((key_56[6] << 1) & 0xFF);
 }
 
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
 /*
  * Turns a 56 bit key into the 64 bit, odd parity key and sets the key.  The
  * key schedule ks is also set.
@@ -142,17 +143,8 @@ static void setup_des_key(const unsigned char *key_56,
 {
   DES_cblock key;
 
-  /* Expand the 56-bit key to 64-bits */
   extend_key_56_to_64(key_56, (char *) key);
-
-  /* Set the key parity to odd */
-#if defined(HAVE_BORINGSSL)
-  Curl_des_set_odd_parity((unsigned char *) &key, sizeof(key));
-#else
   DES_set_odd_parity(&key);
-#endif
-
-  /* Set the key */
   DES_set_key(&key, ks);
 }
 
@@ -162,15 +154,8 @@ static void setup_des_key(const unsigned char *key_56,
                           struct des_ctx *des)
 {
   char key[8];
-
-  /* Expand the 56-bit key to 64-bits */
   extend_key_56_to_64(key_56, key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) key, sizeof(key));
-
-  /* Set the key */
-  des_set_key(des, (const uint8_t *) key);
+  des_set_key(des, (const uint8_t*)key);
 }
 
 #elif defined(USE_GNUTLS)
@@ -182,15 +167,8 @@ static void setup_des_key(const unsigned char *key_56,
                           gcry_cipher_hd_t *des)
 {
   char key[8];
-
-  /* Expand the 56-bit key to 64-bits */
   extend_key_56_to_64(key_56, key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) key, sizeof(key));
-
-  /* Set the key */
-  gcry_cipher_setkey(*des, key, sizeof(key));
+  gcry_cipher_setkey(*des, key, 8);
 }
 
 #elif defined(USE_NSS)
@@ -218,21 +196,16 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   if(!slot)
     return FALSE;
 
-  /* Expand the 56-bit key to 64-bits */
+  /* expand the 56 bit key to 64 bit and wrap by NSS */
   extend_key_56_to_64(key_56, key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) key, sizeof(key));
-
-  /* Import the key */
   key_item.data = (unsigned char *)key;
-  key_item.len = sizeof(key);
+  key_item.len = /* hard-wired */ 8;
   symkey = PK11_ImportSymKey(slot, mech, PK11_OriginUnwrap, CKA_ENCRYPT,
                              &key_item, NULL);
   if(!symkey)
     goto fail;
 
-  /* Create the DES encryption context */
+  /* create DES encryption context */
   param = PK11_ParamFromIV(mech, /* no IV in ECB mode */ NULL);
   if(!param)
     goto fail;
@@ -240,7 +213,7 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   if(!ctx)
     goto fail;
 
-  /* Perform the encryption */
+  /* perform the encryption */
   if(SECSuccess == PK11_CipherOp(ctx, out, &out_len, /* outbuflen */ 8,
                                  (unsigned char *)in, /* inbuflen */ 8)
       && SECSuccess == PK11_Finalize(ctx))
@@ -267,17 +240,10 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   size_t out_len;
   CCCryptorStatus err;
 
-  /* Expand the 56-bit key to 64-bits */
   extend_key_56_to_64(key_56, key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) key, sizeof(key));
-
-  /* Perform the encryption */
   err = CCCrypt(kCCEncrypt, kCCAlgorithmDES, kCCOptionECBMode, key,
                 kCCKeySizeDES, NULL, in, 8 /* inbuflen */, out,
                 8 /* outbuflen */, &out_len);
-
   return err == kCCSuccess;
 }
 
@@ -289,19 +255,10 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
   char key[8];
   _CIPHER_Control_T ctl;
 
-  /* Setup the cipher control structure */
   ctl.Func_ID = ENCRYPT_ONLY;
-  ctl.Data_Len = sizeof(key);
-
-  /* Expand the 56-bit key to 64-bits */
+  ctl.Data_Len = 8;
   extend_key_56_to_64(key_56, ctl.Crypto_Key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) ctl.Crypto_Key, ctl.Data_Len);
-
-  /* Perform the encryption */
   _CIPHER((_SPCPTR *) &out, &ctl, (_SPCPTR *) &in);
-
   return TRUE;
 }
 
@@ -324,18 +281,12 @@ static bool encrypt_des(const unsigned char *in, unsigned char *out,
                           CRYPT_VERIFYCONTEXT))
     return FALSE;
 
-  /* Setup the key blob structure */
   memset(&blob, 0, sizeof(blob));
+  extend_key_56_to_64(key_56, blob.key);
   blob.hdr.bType = PLAINTEXTKEYBLOB;
   blob.hdr.bVersion = 2;
   blob.hdr.aiKeyAlg = CALG_DES;
   blob.len = sizeof(blob.key);
-
-  /* Expand the 56-bit key to 64-bits */
-  extend_key_56_to_64(key_56, blob.key);
-
-  /* Set the key parity to odd */
-  Curl_des_set_odd_parity((unsigned char *) blob.key, sizeof(blob.key));
 
   /* Import the key */
   if(!CryptImportKey(hprov, (BYTE *) &blob, sizeof(blob), 0, 0, &hkey)) {
@@ -366,7 +317,7 @@ void Curl_ntlm_core_lm_resp(const unsigned char *keys,
                             const unsigned char *plaintext,
                             unsigned char *results)
 {
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
   DES_key_schedule ks;
 
   setup_des_key(keys, DESKEY(ks));
@@ -441,7 +392,7 @@ CURLcode Curl_ntlm_core_mk_lm_hash(struct SessionHandle *data,
   {
     /* Create LanManager hashed password. */
 
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
     DES_key_schedule ks;
 
     setup_des_key(pw, DESKEY(ks));
@@ -508,7 +459,6 @@ static void ascii_uppercase_to_unicode_le(unsigned char *dest,
 
 /*
  * Set up nt hashed passwords
- * @unittest: 1600
  */
 CURLcode Curl_ntlm_core_mk_nt_hash(struct SessionHandle *data,
                                    const char *password,
@@ -532,7 +482,7 @@ CURLcode Curl_ntlm_core_mk_nt_hash(struct SessionHandle *data,
 
   {
     /* Create NT hashed password. */
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
     MD4_CTX MD4pw;
     MD4_Init(&MD4pw);
     MD4_Update(&MD4pw, pw, 2 * len);
@@ -618,7 +568,7 @@ CURLcode Curl_ntlm_core_mk_ntlmv2_hash(const char *user, size_t userlen,
   result = Curl_hmac_md5(ntlmhash, 16, identity, curlx_uztoui(identity_len),
                          ntlmv2hash);
 
-  free(identity);
+  Curl_safefree(identity);
 
   return result;
 }
@@ -705,7 +655,8 @@ CURLcode Curl_ntlm_core_mk_ntlmv2_resp(unsigned char *ntlmv2hash,
   result = Curl_hmac_md5(ntlmv2hash, NTLM_HMAC_MD5_LEN, ptr + 8,
                          NTLMv2_BLOB_LEN + 8, hmac_output);
   if(result) {
-    free(ptr);
+    Curl_safefree(ptr);
+
     return result;
   }
 

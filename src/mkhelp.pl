@@ -54,9 +54,6 @@ while (<STDIN>) {
     # this should be removed:
     $line =~ s/(.|_)//g;
 
-    # remove trailing CR from line. msysgit checks out files as line+CRLF
-    $line =~ s/\r$//;
-
     if($line =~ /^([ \t]*\n|curl)/i) {
         # cut off headers and empty lines
         $wline++; # count number of cut off lines
@@ -93,12 +90,7 @@ open(READ, "<$README") ||
     die "couldn't read the README infile $README";
 
 while(<READ>) {
-    my $line = $_;
-
-    # remove trailing CR from line. msysgit checks out files as line+CRLF
-    $line =~ s/\r$//;
-
-    push @out, $line;
+    push @out, $_;
 }
 close(READ);
 
