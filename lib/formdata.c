@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -34,12 +34,14 @@
 #include "formdata.h"
 #include "vtls/vtls.h"
 #include "strequal.h"
+#include "curl_memory.h"
 #include "sendf.h"
 #include "strdup.h"
-#include "curl_printf.h"
 
-/* The last #include files should be: */
-#include "curl_memory.h"
+#define _MPRINTF_REPLACE /* use our functions only */
+#include <curl/mprintf.h>
+
+/* The last #include file should be: */
 #include "memdebug.h"
 
 #ifndef HAVE_BASENAME
@@ -415,7 +417,7 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
               else {
                 form = AddFormInfo(fname, NULL, current_form);
                 if(!form) {
-                  free(fname);
+                  Curl_safefree(fname);
                   return_value = CURL_FORMADD_MEMORY;
                 }
                 else {
@@ -504,7 +506,7 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
               else {
                 form = AddFormInfo(NULL, type, current_form);
                 if(!form) {
-                  free(type);
+                  Curl_safefree(type);
                   return_value = CURL_FORMADD_MEMORY;
                 }
                 else {
@@ -711,7 +713,7 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
      now by the httppost linked list */
   while(first_form) {
     FormInfo *ptr = first_form->more;
-    free(first_form);
+    Curl_safefree(first_form);
     first_form = ptr;
   }
 
@@ -756,7 +758,7 @@ curl_off_t VmsRealFileSize(const char * name,
   int ret_stat;
   FILE * file;
 
-  file = fopen(name, "r"); /* VMS */
+  file = fopen(name, "r");
   if(file == NULL)
     return 0;
 
@@ -969,16 +971,19 @@ void curl_formfree(struct curl_httppost *form)
     next=form->next;  /* the following form line */
 
     /* recurse to sub-contents */
-    curl_formfree(form->more);
+    if(form->more)
+      curl_formfree(form->more);
 
-    if(!(form->flags & HTTPPOST_PTRNAME))
+    if(!(form->flags & HTTPPOST_PTRNAME) && form->name)
       free(form->name); /* free the name */
     if(!(form->flags &
-         (HTTPPOST_PTRCONTENTS|HTTPPOST_BUFFER|HTTPPOST_CALLBACK))
-      )
+         (HTTPPOST_PTRCONTENTS|HTTPPOST_BUFFER|HTTPPOST_CALLBACK)) &&
+       form->contents)
       free(form->contents); /* free the contents */
-    free(form->contenttype); /* free the content type */
-    free(form->showfilename); /* free the faked file name */
+    if(form->contenttype)
+      free(form->contenttype); /* free the content type */
+    if(form->showfilename)
+      free(form->showfilename); /* free the faked file name */
     free(form);       /* free the struct */
 
   } while((form = next) != NULL); /* continue */
@@ -1068,7 +1073,7 @@ static CURLcode formdata_add_filename(const struct curl_httppost *file,
     /* filename need be escaped */
     filename_escaped = malloc(strlen(filename)*2+1);
     if(!filename_escaped) {
-      free(filebasename);
+      Curl_safefree(filebasename);
       return CURLE_OUT_OF_MEMORY;
     }
     p0 = filename_escaped;
@@ -1084,8 +1089,8 @@ static CURLcode formdata_add_filename(const struct curl_httppost *file,
   result = AddFormDataf(form, size,
                         "; filename=\"%s\"",
                         filename);
-  free(filename_escaped);
-  free(filebasename);
+  Curl_safefree(filename_escaped);
+  Curl_safefree(filebasename);
   return result;
 }
 
@@ -1135,7 +1140,7 @@ CURLcode Curl_getformdata(struct SessionHandle *data,
                         boundary);
 
   if(result) {
-    free(boundary);
+    Curl_safefree(boundary);
     return result;
   }
   /* we DO NOT include that line in the total size of the POST, since it'll be
@@ -1178,7 +1183,7 @@ CURLcode Curl_getformdata(struct SessionHandle *data,
       /* If used, this is a link to more file names, we must then do
          the magic to include several files with the same field name */
 
-      free(fileboundary);
+      Curl_safefree(fileboundary);
       fileboundary = formboundary(data);
       if(!fileboundary) {
         result = CURLE_OUT_OF_MEMORY;
@@ -1331,15 +1336,15 @@ CURLcode Curl_getformdata(struct SessionHandle *data,
 
   if(result) {
     Curl_formclean(&firstform);
-    free(fileboundary);
-    free(boundary);
+    Curl_safefree(fileboundary);
+    Curl_safefree(boundary);
     return result;
   }
 
   *sizep = size;
 
-  free(fileboundary);
-  free(boundary);
+  Curl_safefree(fileboundary);
+  Curl_safefree(boundary);
 
   *finalform = firstform;
 
@@ -1385,7 +1390,7 @@ static FILE * vmsfopenread(const char *file, const char *mode) {
   case FAB$C_VAR:
   case FAB$C_VFC:
   case FAB$C_STMCR:
-    return fopen(file, "r"); /* VMS */
+    return fopen(file, "r");
     break;
   default:
     return fopen(file, "r", "rfm=stmlf", "ctx=stm");

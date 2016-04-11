@@ -62,7 +62,6 @@ unsigned int Curl_read32_le(unsigned char *buf)
          ((unsigned int)buf[2] << 16) | ((unsigned int)buf[3] << 24);
 }
 
-#if (CURL_SIZEOF_CURL_OFF_T > 4)
 /*
  * Curl_read64_le()
  *
@@ -97,8 +96,6 @@ unsigned __int64 Curl_read64_le(unsigned char *buf)
          ((unsigned __int64)buf[6] << 48) | ((unsigned __int64)buf[7] << 56);
 }
 #endif
-
-#endif /* CURL_SIZEOF_CURL_OFF_T > 4 */
 
 /*
  * Curl_read16_be()
@@ -138,7 +135,6 @@ unsigned int Curl_read32_be(unsigned char *buf)
          ((unsigned int)buf[2] << 8) | ((unsigned int)buf[3]);
 }
 
-#if (CURL_SIZEOF_CURL_OFF_T > 4)
 /*
  * Curl_read64_be()
  *
@@ -173,8 +169,6 @@ unsigned __int64 Curl_read64_be(unsigned char *buf)
          ((unsigned __int64)buf[6] << 8) | ((unsigned __int64)buf[7]);
 }
 #endif
-
-#endif /* CURL_SIZEOF_CURL_OFF_T > 4 */
 
 /*
  * Curl_write16_le()
@@ -233,4 +227,4 @@ void Curl_write64_le(const __int64 value, unsigned char *buffer)
   Curl_write32_le((int)value, buffer);
   Curl_write32_le((int)(value >> 32), buffer + 4);
 }
-#endif /* CURL_SIZEOF_CURL_OFF_T > 4 */
+#endif

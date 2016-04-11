@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -27,12 +27,12 @@
 #include "urldata.h"
 #include "getinfo.h"
 
+#include "curl_memory.h"
 #include "vtls/vtls.h"
 #include "connect.h" /* Curl_getconnectinfo() */
 #include "progress.h"
 
-/* The last #include files should be: */
-#include "curl_memory.h"
+/* Make this the last #include */
 #include "memdebug.h"
 
 /*
@@ -58,7 +58,8 @@ CURLcode Curl_initinfo(struct SessionHandle *data)
   info->filetime = -1; /* -1 is an illegal time and thus means unknown */
   info->timecond = FALSE;
 
-  free(info->contenttype);
+  if(info->contenttype)
+    free(info->contenttype);
   info->contenttype = NULL;
 
   info->header_size = 0;
@@ -305,7 +306,7 @@ static CURLcode getinfo_slist(struct SessionHandle *data, CURLINFO info,
         break; /* no SSL session found */
 
       /* Return the TLS session information from the relevant backend */
-#ifdef USE_OPENSSL
+#ifdef USE_SSLEAY
       internals = conn->ssl[sockindex].ctx;
 #endif
 #ifdef USE_GNUTLS

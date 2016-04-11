@@ -65,10 +65,11 @@ void Curl_global_host_cache_dtor(void);
 
 struct Curl_dns_entry {
   Curl_addrinfo *addr;
-  /* timestamp == 0 -- CURLOPT_RESOLVE entry, doesn't timeout */
+  /* timestamp == 0 -- entry not in hostcache
+     timestamp != 0 -- entry is in hostcache */
   time_t timestamp;
-  /* use-counter, use Curl_resolv_unlock to release reference */
-  long inuse;
+  long inuse;      /* use-counter, make very sure you decrease this
+                      when you're done using the address you received */
 };
 
 /*
@@ -124,8 +125,8 @@ void Curl_resolv_unlock(struct SessionHandle *data,
 /* for debugging purposes only: */
 void Curl_scan_cache_used(void *user, void *ptr);
 
-/* init a new dns cache and return success */
-int Curl_mk_dnscache(struct curl_hash *hash);
+/* make a new dns cache and return the handle */
+struct curl_hash *Curl_mk_dnscache(void);
 
 /* prune old entries from the DNS cache */
 void Curl_hostcache_prune(struct SessionHandle *data);
@@ -174,9 +175,6 @@ const char *Curl_printable_address(const Curl_addrinfo *ip,
  * Curl_fetch_addr() fetches a 'Curl_dns_entry' already in the DNS cache.
  *
  * Returns the Curl_dns_entry entry pointer or NULL if not in the cache.
- *
- * The returned data *MUST* be "unlocked" with Curl_resolv_unlock() after
- * use, or we'll leak memory!
  */
 struct Curl_dns_entry *
 Curl_fetch_addr(struct connectdata *conn,

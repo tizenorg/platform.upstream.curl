@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -29,9 +29,14 @@
 #  include <fcntl.h>
 #endif
 
-#ifdef USE_OPENSSL
-#  include <openssl/md5.h>
-#  include <openssl/sha.h>
+#ifdef USE_SSLEAY
+#  ifdef USE_OPENSSL
+#    include <openssl/md5.h>
+#    include <openssl/sha.h>
+#  else
+#    include <md5.h>
+#    include <sha.h>
+#  endif
 #elif defined(USE_GNUTLS_NETTLE)
 #  include <nettle/md5.h>
 #  include <nettle/sha.h>
@@ -376,7 +381,7 @@ static void SHA256_Final(unsigned char digest[32], SHA256_CTX *ctx)
   sha256_finish(ctx, digest);
 }
 
-#elif defined(_WIN32) && !defined(USE_OPENSSL)
+#elif defined(_WIN32) && !defined(USE_SSLEAY)
 
 static void win32_crypto_final(struct win32_crypto_hash *ctx,
                                unsigned char *digest,
@@ -621,10 +626,6 @@ static int check_hash(const char *filename,
   }
 
   result = malloc(digest_def->dparams->digest_resultlen);
-  if(!result) {
-    close(fd);
-    return -1;
-  }
   while(1) {
     unsigned char buf[4096];
     ssize_t len = read(fd, buf, sizeof(buf));
@@ -680,17 +681,12 @@ static metalink_checksum *new_metalink_checksum_from_hex_digest
   size_t i;
   size_t len = strlen(hex_digest);
   digest = malloc(len/2);
-  if(!digest)
-    return 0;
-
   for(i = 0; i < len; i += 2) {
     digest[i/2] = hex_to_uint(hex_digest+i);
   }
   chksum = malloc(sizeof(metalink_checksum));
-  if(chksum) {
-    chksum->digest_def = digest_def;
-    chksum->digest = digest;
-  }
+  chksum->digest_def = digest_def;
+  chksum->digest = digest;
   return chksum;
 }
 
@@ -698,14 +694,8 @@ static metalink_resource *new_metalink_resource(const char *url)
 {
   metalink_resource *res;
   res = malloc(sizeof(metalink_resource));
-  if(res) {
-    res->next = NULL;
-    res->url = strdup(url);
-    if(!res->url) {
-      free(res);
-      return NULL;
-    }
-  }
+  res->next = NULL;
+  res->url = strdup(url);
   return res;
 }
 
@@ -730,15 +720,8 @@ static metalinkfile *new_metalinkfile(metalink_file_t *fileinfo)
 {
   metalinkfile *f;
   f = (metalinkfile*)malloc(sizeof(metalinkfile));
-  if(!f)
-    return NULL;
-
   f->next = NULL;
   f->filename = strdup(fileinfo->name);
-  if(!f->filename) {
-    free(f);
-    return NULL;
-  }
   f->checksum = NULL;
   f->resource = NULL;
   if(fileinfo->checksums) {
@@ -839,10 +822,8 @@ int parse_metalink(struct OperationConfig *config, struct OutStruct *outs,
       url = new_getout(config);
 
     if(url) {
-      metalinkfile *mlfile = new_metalinkfile(*files);
-      if(!mlfile)
-        break;
-
+      metalinkfile *mlfile;
+      mlfile = new_metalinkfile(*files);
       if(!mlfile->checksum) {
         warnings = TRUE;
         fprintf(config->global->errors,

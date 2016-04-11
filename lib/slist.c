@@ -22,10 +22,10 @@
 
 #include "curl_setup.h"
 
+#include "curl_memory.h"
 #include "slist.h"
 
-/* The last #include files should be: */
-#include "curl_memory.h"
+/* The last #include file should be: */
 #include "memdebug.h"
 
 /* returns last node in linked list */

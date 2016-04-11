@@ -44,11 +44,11 @@
 #include "transfer.h"
 #include "vtls/vtls.h"
 #include "curl_ntlm_core.h"
+#include "curl_memory.h"
 #include "escape.h"
 #include "curl_endian.h"
 
-/* The last #include files should be: */
-#include "curl_memory.h"
+/* The last #include file should be: */
 #include "memdebug.h"
 
 /* Local API functions */
@@ -783,15 +783,9 @@ static CURLcode smb_request_state(struct connectdata *conn, bool *done)
     off = Curl_read16_le(((unsigned char *) msg) +
                          sizeof(struct smb_header) + 13);
     if(len > 0) {
-      struct smb_conn *smbc = &conn->proto.smbc;
-      if(off + sizeof(unsigned int) + len > smbc->got) {
-        failf(conn->data, "Invalid input packet");
-        result = CURLE_RECV_ERROR;
-      }
-      else
-        result = Curl_client_write(conn, CLIENTWRITE_BODY,
-                                   (char *)msg + off + sizeof(unsigned int),
-                                   len);
+      result = Curl_client_write(conn, CLIENTWRITE_BODY,
+                                 (char *)msg + off + sizeof(unsigned int),
+                                 len);
       if(result) {
         req->result = result;
         next_state = SMB_CLOSE;
@@ -941,7 +935,7 @@ static CURLcode smb_parse_url_path(struct connectdata *conn)
   /* Parse the path for the share */
   req->share = strdup((*path == '/' || *path == '\\') ? path + 1 : path);
   if(!req->share) {
-    free(path);
+    Curl_safefree(path);
 
     return CURLE_OUT_OF_MEMORY;
   }
@@ -952,7 +946,7 @@ static CURLcode smb_parse_url_path(struct connectdata *conn)
 
   /* The share must be present */
   if(!slash) {
-    free(path);
+    Curl_safefree(path);
 
     return CURLE_URL_MALFORMAT;
   }
@@ -966,7 +960,7 @@ static CURLcode smb_parse_url_path(struct connectdata *conn)
       *slash = '\\';
   }
 
-  free(path);
+  Curl_safefree(path);
 
   return CURLE_OK;
 }
