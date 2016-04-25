@@ -5,11 +5,11 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 1998 - 2014, Daniel Stenberg, <daniel@haxx.se>, et al.
+# Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at http://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.haxx.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -64,7 +64,7 @@ message(STATUS "curl version=[${CURL_VERSION}]")
 # SET(PACKAGE_NAME "curl")
 # SET(PACKAGE_VERSION "-")
 # SET(PACKAGE_STRING "curl-")
-# SET(PACKAGE_BUGREPORT "a suitable curl mailing list => http://curl.haxx.se/mail/")
+# SET(PACKAGE_BUGREPORT "a suitable curl mailing list => https://curl.haxx.se/mail/")
 set(OPERATING_SYSTEM "${CMAKE_SYSTEM_NAME}")
 set(OS "\"${CMAKE_SYSTEM_NAME}\"")
 
@@ -76,6 +76,24 @@ option(BUILD_CURL_TESTS "Set to ON to build cURL tests." ON)
 option(CURL_STATICLIB "Set to ON to build libcurl with static linking." OFF)
 option(ENABLE_ARES "Set to ON to enable c-ares support" OFF)
 option(ENABLE_THREADED_RESOLVER "Set to ON to enable POSIX threaded DNS lookup" OFF)
+
+option(ENABLE_DEBUG "Set to ON to enable curl debug features" OFF)
+option(ENABLE_CURLDEBUG "Set to ON to build with TrackMemory feature enabled" OFF)
+
+if (ENABLE_DEBUG)
+  # DEBUGBUILD will be defined only for Debug builds
+  if(NOT CMAKE_VERSION VERSION_LESS 3.0)
+    set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS $<$<CONFIG:Debug>:DEBUGBUILD>)
+  else()
+    set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS_DEBUG DEBUGBUILD)
+  endif()
+  set(ENABLE_CURLDEBUG ON)
+endif()
+
+if (ENABLE_CURLDEBUG)
+  set_property(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS CURLDEBUG)
+endif()
+
 # initialize CURL_LIBS
 set(CURL_LIBS "")
 
@@ -103,11 +121,6 @@ endif()
 
 option(CURL_HIDDEN_SYMBOLS "Set to ON to hide libcurl internal symbols (=hide all symbols that aren't officially external)." ON)
 mark_as_advanced(CURL_HIDDEN_SYMBOLS)
-
-# IF(WIN32)
-# OPTION(CURL_WINDOWS_SSPI "Use windows libraries to allow NTLM authentication without openssl" ON)
-# MARK_AS_ADVANCED(CURL_WINDOWS_SSPI)
-# ENDIF()
 
 option(HTTP_ONLY "disables all protocols except HTTP (This overrides all CURL_DISABLE_* options)" OFF)
 mark_as_advanced(HTTP_ONLY)
@@ -168,7 +181,7 @@ option(DISABLED_THREADSAFE "Set to explicitly specify we don't want to use threa
 mark_as_advanced(DISABLED_THREADSAFE)
 option(ENABLE_IPV6 "Define if you want to enable IPv6 support" ON)
 mark_as_advanced(ENABLE_IPV6)
-if(ENABLE_IPV6)
+if(ENABLE_IPV6 AND NOT WIN32)
   include(CheckStructHasMember)
   check_struct_has_member("struct sockaddr_in6" sin6_addr "netinet/in.h"
                           HAVE_SOCKADDR_IN6_SIN6_ADDR)
@@ -235,9 +248,11 @@ include (CheckLibraryExists)
 include (CheckSymbolExists)
 include (CheckTypeSize)
 include (CheckCSourceCompiles)
+include (CMakeDependentOption)
 
 # On windows preload settings
 if(WIN32)
+  set(CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS} -D_WINSOCKAPI_")
   include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/Platforms/WindowsCache.cmake)
 endif(WIN32)
 
@@ -271,15 +286,22 @@ endif(NOT NOT_NEED_LIBNSL)
 
 check_function_exists(gethostname HAVE_GETHOSTNAME)
 
+set(OPENSSL_DEFAULT ON)
 if(WIN32)
+  set(OPENSSL_DEFAULT OFF)
   check_library_exists_concat("ws2_32" getch        HAVE_LIBWS2_32)
   check_library_exists_concat("winmm"  getch        HAVE_LIBWINMM)
 endif()
 
-option(CMAKE_USE_OPENSSL "Use OpenSSL code. Experimental" ON)
+option(CMAKE_USE_OPENSSL "Use OpenSSL code. Experimental" ${OPENSSL_DEFAULT})
 mark_as_advanced(CMAKE_USE_OPENSSL)
 
-set(USE_SSLEAY OFF)
+if(WIN32)
+  CMAKE_DEPENDENT_OPTION(CURL_WINDOWS_SSPI "Use windows libraries to allow NTLM authentication without openssl" ON
+    "NOT CMAKE_USE_OPENSSL" OFF)
+  mark_as_advanced(CURL_WINDOWS_SSPI)
+endif()
+
 set(USE_OPENSSL OFF)
 set(HAVE_LIBCRYPTO OFF)
 set(HAVE_LIBSSL OFF)
@@ -288,32 +310,33 @@ if(CMAKE_USE_OPENSSL)
   find_package(OpenSSL)
   if(OPENSSL_FOUND)
     list(APPEND CURL_LIBS ${OPENSSL_LIBRARIES})
-    set(USE_SSLEAY ON)
     set(USE_OPENSSL ON)
     set(HAVE_LIBCRYPTO ON)
     set(HAVE_LIBSSL ON)
     include_directories(${OPENSSL_INCLUDE_DIR})
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    check_include_file_concat("openssl/crypto.h" HAVE_OPENSSL_CRYPTO_H)
-    check_include_file_concat("openssl/engine.h" HAVE_OPENSSL_ENGINE_H)
-    check_include_file_concat("openssl/err.h"    HAVE_OPENSSL_ERR_H)
-    check_include_file_concat("openssl/pem.h"    HAVE_OPENSSL_PEM_H)
-    check_include_file_concat("openssl/pkcs12.h" HAVE_OPENSSL_PKCS12_H)
-    check_include_file_concat("openssl/rsa.h"    HAVE_OPENSSL_RSA_H)
-    check_include_file_concat("openssl/ssl.h"    HAVE_OPENSSL_SSL_H)
-    check_include_file_concat("openssl/x509.h"   HAVE_OPENSSL_X509_H)
-    check_include_file_concat("openssl/rand.h"   HAVE_OPENSSL_RAND_H)
+    check_include_file("openssl/crypto.h" HAVE_OPENSSL_CRYPTO_H)
+    check_include_file("openssl/engine.h" HAVE_OPENSSL_ENGINE_H)
+    check_include_file("openssl/err.h"    HAVE_OPENSSL_ERR_H)
+    check_include_file("openssl/pem.h"    HAVE_OPENSSL_PEM_H)
+    check_include_file("openssl/pkcs12.h" HAVE_OPENSSL_PKCS12_H)
+    check_include_file("openssl/rsa.h"    HAVE_OPENSSL_RSA_H)
+    check_include_file("openssl/ssl.h"    HAVE_OPENSSL_SSL_H)
+    check_include_file("openssl/x509.h"   HAVE_OPENSSL_X509_H)
+    check_include_file("openssl/rand.h"   HAVE_OPENSSL_RAND_H)
+  elseif(WIN32)
+    set(CURL_WINDOWS_SSPI ON)
   endif()
 endif()
 
 if(NOT CURL_DISABLE_LDAP)
 
   if(WIN32)
-    option(CURL_LDAP_WIN "Use Windows LDAP implementation" ON)
-    if(CURL_LDAP_WIN)
+    option(USE_WIN32_LDAP "Use Windows LDAP implementation" ON)
+    if(USE_WIN32_LDAP)
       check_library_exists("wldap32" cldap_open "" HAVE_WLDAP32)
       if(NOT HAVE_WLDAP32)
-        set(CURL_LDAP_WIN OFF)
+        set(USE_WIN32_LDAP OFF)
       endif()
     endif()
   endif()
@@ -323,12 +346,12 @@ if(NOT CURL_DISABLE_LDAP)
   set(CMAKE_LDAP_LIB "ldap" CACHE STRING "Name or full path to ldap library")
   set(CMAKE_LBER_LIB "lber" CACHE STRING "Name or full path to lber library")
 
-  if(CMAKE_USE_OPENLDAP AND CURL_LDAP_WIN)
-    message(FATAL_ERROR "Cannot use CURL_LDAP_WIN and CMAKE_USE_OPENLDAP at the same time")
+  if(CMAKE_USE_OPENLDAP AND USE_WIN32_LDAP)
+    message(FATAL_ERROR "Cannot use USE_WIN32_LDAP and CMAKE_USE_OPENLDAP at the same time")
   endif()
   
   # Now that we know, we're not using windows LDAP...
-  if(NOT CURL_LDAP_WIN)
+  if(NOT USE_WIN32_LDAP)
     # Check for LDAP
     set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
     check_library_exists_concat(${CMAKE_LDAP_LIB} ldap_init HAVE_LIBLDAP)
@@ -338,9 +361,10 @@ if(NOT CURL_DISABLE_LDAP)
     check_include_file_concat("winber.h"  HAVE_WINBER_H)
   endif()
   
+  set(CMAKE_REQUIRED_INCLUDES_BAK ${CMAKE_REQUIRED_INCLUDES})
   set(CMAKE_LDAP_INCLUDE_DIR "" CACHE STRING "Path to LDAP include directory")
   if(CMAKE_LDAP_INCLUDE_DIR)
-    set(CMAKE_REQUIRED_INCLUDES ${CMAKE_LDAP_INCLUDE_DIR})
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${CMAKE_LDAP_INCLUDE_DIR})
   endif()
   check_include_file_concat("ldap.h"           HAVE_LDAP_H)
   check_include_file_concat("lber.h"           HAVE_LBER_H)
@@ -348,9 +372,11 @@ if(NOT CURL_DISABLE_LDAP)
   if(NOT HAVE_LDAP_H)
     message(STATUS "LDAP_H not found CURL_DISABLE_LDAP set ON")
     set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+    set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES_BAK}) #LDAP includes won't be used
   elseif(NOT HAVE_LIBLDAP)
     message(STATUS "LDAP library '${CMAKE_LDAP_LIB}' not found CURL_DISABLE_LDAP set ON")
     set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+    set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES_BAK}) #LDAP includes won't be used
   else()
     if(CMAKE_USE_OPENLDAP)
       set(USE_OPENLDAP ON)
@@ -384,7 +410,7 @@ if(NOT CURL_DISABLE_LDAP)
         return 0;
       }"
     )
-    set(CMAKE_REQUIRED_DEFINITIONS "-DLDAP_DEPRECATED=1" "-DWIN32_LEAN_AND_MEAN")
+    set(CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS} -DLDAP_DEPRECATED=1")
     list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_LDAP_LIB})
     if(HAVE_LIBLBER)
       list(APPEND CMAKE_REQUIRED_LIBRARIES ${CMAKE_LBER_LIB})
@@ -431,6 +457,7 @@ if(CURL_ZLIB)
     set(HAVE_LIBZ ON)
     list(APPEND CURL_LIBS ${ZLIB_LIBRARIES})
     include_directories(${ZLIB_INCLUDE_DIRS})
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${ZLIB_INCLUDE_DIRS})
   endif()
 endif()
 
@@ -446,7 +473,7 @@ if(CMAKE_USE_LIBSSH2)
   if(LIBSSH2_FOUND)
     list(APPEND CURL_LIBS ${LIBSSH2_LIBRARY})
     set(CMAKE_REQUIRED_LIBRARIES ${LIBSSH2_LIBRARY})
-    set(CMAKE_REQUIRED_INCLUDES "${LIBSSH2_INCLUDE_DIR}")
+    list(APPEND CMAKE_REQUIRED_INCLUDES "${LIBSSH2_INCLUDE_DIR}")
     include_directories("${LIBSSH2_INCLUDE_DIR}")
     set(HAVE_LIBSSH2 ON)
     set(USE_LIBSSH2 ON)
@@ -474,12 +501,12 @@ mark_as_advanced(CMAKE_USE_GSSAPI)
 if(CMAKE_USE_GSSAPI)
   find_package(GSS)
 
-  set(HAVE_GSS_API ${GSS_FOUND})
+  set(HAVE_GSSAPI ${GSS_FOUND})
   if(GSS_FOUND)
 
     message(STATUS "Found ${GSS_FLAVOUR} GSSAPI version: \"${GSS_VERSION}\"")
 
-    set(CMAKE_REQUIRED_INCLUDES ${GSS_INCLUDE_DIR})
+    list(APPEND CMAKE_REQUIRED_INCLUDES ${GSS_INCLUDE_DIRECTORIES})
     check_include_file_concat("gssapi/gssapi.h"  HAVE_GSSAPI_GSSAPI_H)
     check_include_file_concat("gssapi/gssapi_generic.h" HAVE_GSSAPI_GSSAPI_GENERIC_H)
     check_include_file_concat("gssapi/gssapi_krb5.h" HAVE_GSSAPI_GSSAPI_KRB5_H)
@@ -515,7 +542,7 @@ if(CMAKE_USE_GSSAPI)
 
     endif()
 
-    include_directories(${GSS_INCLUDE_DIR})
+    include_directories(${GSS_INCLUDE_DIRECTORIES})
     link_directories(${GSS_LINK_DIRECTORIES})
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GSS_COMPILER_FLAGS}")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${GSS_LINKER_FLAGS}")
@@ -535,17 +562,28 @@ else()
   unset(USE_UNIX_SOCKETS CACHE)
 endif()
 
+
 # Check for header files
-if(NOT UNIX)
-  check_include_file_concat("ws2tcpip.h"     HAVE_WS2TCPIP_H)
-  check_include_file_concat("winsock2.h"     HAVE_WINSOCK2_H)
-endif(NOT UNIX)
-check_include_file_concat("stdio.h"          HAVE_STDIO_H)
 if(NOT UNIX)
   check_include_file_concat("windows.h"      HAVE_WINDOWS_H)
   check_include_file_concat("winsock.h"      HAVE_WINSOCK_H)
+  check_include_file_concat("ws2tcpip.h"     HAVE_WS2TCPIP_H)
+  check_include_file_concat("winsock2.h"     HAVE_WINSOCK2_H)
+  if(CURL_WINDOWS_SSPI)
+    set(CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS} -DSECURITY_WIN32")
+    check_include_file_concat("sspi.h"       HAVE_SSPI_H)
+    if(HAVE_SSPI_H)
+      check_include_file_concat("schannel.h" HAVE_SCHANNEL_H)
+      set(USE_WINDOWS_SSPI ON)
+      if(HAVE_SCHANNEL_H)
+        set(USE_SCHANNEL ON)
+        set(SSL_ENABLED ON)
+      endif()
+    endif()
+  endif()
 endif(NOT UNIX)
 
+check_include_file_concat("stdio.h"          HAVE_STDIO_H)
 check_include_file_concat("inttypes.h"       HAVE_INTTYPES_H)
 check_include_file_concat("sys/filio.h"      HAVE_SYS_FILIO_H)
 check_include_file_concat("sys/ioctl.h"      HAVE_SYS_IOCTL_H)
@@ -737,7 +775,6 @@ if(CMAKE_USE_OPENSSL)
     HAVE_CRYPTO_CLEANUP_ALL_EX_DATA)
   if(HAVE_LIBCRYPTO AND HAVE_LIBSSL)
     set(USE_OPENSSL 1)
-    set(USE_SSLEAY 1)
   endif(HAVE_LIBCRYPTO AND HAVE_LIBSSL)
 endif(CMAKE_USE_OPENSSL)
 check_symbol_exists(gmtime_r      "${CURL_INCLUDES}" HAVE_GMTIME_R)
@@ -1024,7 +1061,8 @@ endfunction()
 
 # Clear list and try to detect available features
 set(_items)
-_add_if("SSL"           SSL_ENABLED)
+_add_if("WinSSL"        SSL_ENABLED AND USE_WINDOWS_SSPI)
+_add_if("OpenSSL"       SSL_ENABLED AND USE_OPENSSL)
 _add_if("IPv6"          ENABLE_IPV6)
 _add_if("unix-sockets"  USE_UNIX_SOCKETS)
 _add_if("libz"          HAVE_LIBZ)
@@ -1032,12 +1070,12 @@ _add_if("AsynchDNS"     USE_ARES OR USE_THREADS_POSIX)
 _add_if("IDN"           HAVE_LIBIDN)
 # TODO SSP1 (WinSSL) check is missing
 _add_if("SSPI"          USE_WINDOWS_SSPI)
-_add_if("GSS-API"       HAVE_GSS_API)
+_add_if("GSS-API"       HAVE_GSSAPI)
 # TODO SSP1 missing for SPNEGO
 _add_if("SPNEGO"        NOT CURL_DISABLE_CRYPTO_AUTH AND
-                        (HAVE_GSS_API OR USE_WINDOWS_SSPI))
+                        (HAVE_GSSAPI OR USE_WINDOWS_SSPI))
 _add_if("Kerberos"      NOT CURL_DISABLE_CRYPTO_AUTH AND
-                        (HAVE_GSS_API OR USE_WINDOWS_SSPI))
+                        (HAVE_GSSAPI OR USE_WINDOWS_SSPI))
 # NTLM support requires crypto function adaptions from various SSL libs
 # TODO alternative SSL libs tests for SSP1, GNUTLS, NSS, DARWINSSL
 if(NOT CURL_DISABLE_CRYPTO_AUTH AND (USE_OPENSSL OR
@@ -1122,7 +1160,7 @@ set(VERSIONNUM              "${CURL_VERSION_NUM}")
 # Finally generate a "curl-config" matching this config
 configure_file("${CURL_SOURCE_DIR}/curl-config.in"
                "${CURL_BINARY_DIR}/curl-config" @ONLY)
-install(FILES "${CMAKE_BINARY_DIR}/curl-config"
+install(FILES "${CURL_BINARY_DIR}/curl-config"
         DESTINATION bin
         PERMISSIONS
           OWNER_READ OWNER_WRITE OWNER_EXECUTE
@@ -1132,7 +1170,7 @@ install(FILES "${CMAKE_BINARY_DIR}/curl-config"
 # Finally generate a pkg-config file matching this config
 configure_file("${CURL_SOURCE_DIR}/libcurl.pc.in"
                "${CURL_BINARY_DIR}/libcurl.pc" @ONLY)
-install(FILES "${CMAKE_BINARY_DIR}/libcurl.pc"
+install(FILES "${CURL_BINARY_DIR}/libcurl.pc"
         DESTINATION lib/pkgconfig)
 
 # This needs to be run very last so other parts of the scripts can take advantage of this.

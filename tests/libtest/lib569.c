@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at http://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.haxx.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -20,9 +20,6 @@
  *
  ***************************************************************************/
 #include "test.h"
-
-#include <curl/mprintf.h>
-
 #include "memdebug.h"
 
 /* build request url */
@@ -118,9 +115,7 @@ test_cleanup:
   if(idfile)
     fclose(idfile);
 
-  if(stream_uri)
-    free(stream_uri);
-
+  free(stream_uri);
   curl_easy_cleanup(curl);
   curl_global_cleanup();
 

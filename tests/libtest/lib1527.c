@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at http://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.haxx.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -83,6 +83,7 @@ int test(char *URL)
   test_setopt(curl, CURLOPT_READFUNCTION, read_callback);
   test_setopt(curl, CURLOPT_HTTPPROXYTUNNEL, 1L);
   test_setopt(curl, CURLOPT_INFILESIZE, strlen(data));
+  test_setopt(curl, CURLOPT_HEADEROPT, CURLHEADER_UNIFIED);
 
   res = curl_easy_perform(curl);
 
