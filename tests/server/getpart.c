@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at http://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.haxx.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -209,8 +209,7 @@ static int decodedata(char  **buf,   /* dest buffer */
     ** let's just assume it is an OOM condition, currently we have
     ** no input for this function that decodes to zero length data.
     */
-    if(buf64)
-      free(buf64);
+    free(buf64);
 
     return GPE_OUT_OF_MEMORY;
   }
@@ -435,15 +434,13 @@ int getpart(char **outbuf, size_t *outlen,
 
   } /* while */
 
-  if(buffer)
-    free(buffer);
+  free(buffer);
 
   if(error != GPE_OK) {
     if(error == GPE_END_OF_FILE)
       error = GPE_OK;
     else {
-      if(*outbuf)
-        free(*outbuf);
+      free(*outbuf);
       *outbuf = NULL;
       *outlen = 0;
     }

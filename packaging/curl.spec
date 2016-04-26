@@ -1,6 +1,6 @@
 Name:       curl
 Summary:    A utility for getting files from remote servers (FTP, HTTP, and others)
-Version:    7.40.0
+Version:    7.48.0
 Release:    1
 Group:      Applications/Internet
 License:    MIT
@@ -18,13 +18,12 @@ Provides:   webclient
 
 
 %description
-cURL is a tool for getting files from HTTP, FTP, FILE, LDAP, LDAPS,
-DICT, TELNET and TFTP servers, using any of the supported protocols.
-cURL is designed to work without user interaction or any kind of
-interactivity. cURL offers many useful capabilities, like proxy support,
-user authentication, FTP upload, HTTP post, and file transfer resume.
+curl is a client to get documents/files from servers, using any of the
+supported protocols. The command is designed to work without user
+interaction or any kind of interactivity.
 
-
+curl offers a busload of useful tricks like proxy support, user
+authentication, ftp upload, HTTP post, file transfer resume and more.
 
 %package -n libcurl
 Summary:    A library for getting files from web servers
@@ -48,12 +47,8 @@ Provides:   curl-devel = %{version}-%{release}
 Obsoletes:   curl-devel < %{version}-%{release}
 
 %description -n libcurl-devel
-cURL is a tool for getting files from FTP, HTTP, Gopher, Telnet, and
-Dict servers, using any of the supported protocols. The libcurl-devel
-package includes files needed for developing applications which can
-use cURL's capabilities internally.
-
-
+libcurl is the core engine of curl; this packages contains all the libs,
+headers, and manual pages to develop applications using libcurl.
 
 %prep
 %setup -q
@@ -78,6 +73,7 @@ CFLAGS+=" -DTIZEN_TV_EXT"
 --enable-manual --enable-versioned-symbols --enable-ares --enable-debug --enable-curldebug \
 --disable-static \
 --with-nghttp2 \
+--without-zsh-functions-dir \
 
 #--with-ca-bundle=%{_sysconfdir}/pki/tls/certs/ca-bundle.crt 
 

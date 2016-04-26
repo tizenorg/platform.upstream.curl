@@ -5,11 +5,11 @@
 #                            | (__| |_| |  _ <| |___
 #                             \___|\___/|_| \_\_____|
 #
-# Copyright (C) 1998 - 2013, Daniel Stenberg, <daniel@haxx.se>, et al.
+# Copyright (C) 1998 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
 #
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution. The terms
-# are also available at http://curl.haxx.se/docs/copyright.html.
+# are also available at https://curl.haxx.se/docs/copyright.html.
 #
 # You may opt to use, copy, modify, merge, publish, distribute and/or sell
 # copies of the Software, and permit persons to whom the Software is
@@ -19,7 +19,6 @@
 # KIND, either express or implied.
 #
 #***************************************************************************
-
 
 dnl CURL_CHECK_DEF (SYMBOL, [INCLUDES], [SILENT])
 dnl -------------------------------------------------
@@ -31,6 +30,10 @@ dnl result in a set of double-quoted strings the returned expansion will
 dnl actually be a single double-quoted string concatenating all them.
 
 AC_DEFUN([CURL_CHECK_DEF], [
+  AC_REQUIRE([CURL_CPP_P])dnl
+  OLDCPPFLAGS=$CPPFLAGS
+  # CPPPFLAGS comes from CURL_CPP_P
+  CPPFLAGS="$CPPPFLAGS"
   AS_VAR_PUSHDEF([ac_HaveDef], [curl_cv_have_def_$1])dnl
   AS_VAR_PUSHDEF([ac_Def], [curl_cv_def_$1])dnl
   if test -z "$SED"; then
@@ -67,6 +70,7 @@ CURL_DEF_TOKEN $1
   fi
   AS_VAR_POPDEF([ac_Def])dnl
   AS_VAR_POPDEF([ac_HaveDef])dnl
+  CPPFLAGS=$OLDCPPFLAGS
 ])
 
 
@@ -1851,8 +1855,10 @@ AC_DEFUN([CURL_CHECK_FUNC_CLOCK_GETTIME_MONOTONIC], [
   AC_REQUIRE([AC_HEADER_TIME])dnl
   AC_CHECK_HEADERS(sys/types.h sys/time.h time.h)
   AC_MSG_CHECKING([for monotonic clock_gettime])
-  AC_COMPILE_IFELSE([
-    AC_LANG_PROGRAM([[
+  #
+  if test "x$dontwant_rt" == "xno" ; then
+    AC_COMPILE_IFELSE([
+      AC_LANG_PROGRAM([[
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -1866,17 +1872,18 @@ AC_DEFUN([CURL_CHECK_FUNC_CLOCK_GETTIME_MONOTONIC], [
 #include <time.h>
 #endif
 #endif
-    ]],[[
-      struct timespec ts;
-      (void)clock_gettime(CLOCK_MONOTONIC, &ts);
-    ]])
-  ],[
-    AC_MSG_RESULT([yes])
-    ac_cv_func_clock_gettime="yes"
-  ],[
-    AC_MSG_RESULT([no])
-    ac_cv_func_clock_gettime="no"
-  ])
+      ]],[[
+        struct timespec ts;
+        (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+      ]])
+    ],[
+      AC_MSG_RESULT([yes])
+      ac_cv_func_clock_gettime="yes"
+    ],[
+      AC_MSG_RESULT([no])
+      ac_cv_func_clock_gettime="no"
+    ])
+  fi
   dnl Definition of HAVE_CLOCK_GETTIME_MONOTONIC is intentionally postponed
   dnl until library linking and run-time checks for clock_gettime succeed.
 ])
@@ -2452,23 +2459,6 @@ AC_DEFUN([CURL_CHECK_FUNC_SELECT], [
 ])
 
 
-# This is only a temporary fix. This macro is here to replace the broken one
-# delivered by the automake project (including the 1.9.6 release). As soon as
-# they ship a working version we SHOULD remove this work-around.
-
-AC_DEFUN([AM_MISSING_HAS_RUN],
-[AC_REQUIRE([AM_AUX_DIR_EXPAND])dnl
-test x"${MISSING+set}" = xset || MISSING="\${SHELL} \"$am_aux_dir/missing\""
-# Use eval to expand $SHELL
-if eval "$MISSING --run true"; then
-  am_missing_run="$MISSING --run "
-else
-  am_missing_run=
-  AC_MSG_WARN([`missing' script is too old or missing])
-fi
-])
-
-
 dnl CURL_VERIFY_RUNTIMELIBS
 dnl -------------------------------------------------
 dnl Verify that the shared libs found so far can be used when running
@@ -2584,7 +2574,8 @@ AC_DEFUN([CURL_CHECK_CA_BUNDLE], [
   AC_MSG_CHECKING([default CA cert bundle/path])
 
   AC_ARG_WITH(ca-bundle,
-AC_HELP_STRING([--with-ca-bundle=FILE], [File name to use as CA bundle])
+AC_HELP_STRING([--with-ca-bundle=FILE],
+[Path to a file containing CA certificates (example: /etc/ca-bundle.crt)])
 AC_HELP_STRING([--without-ca-bundle], [Don't use a default CA bundle]),
   [
     want_ca="$withval"
@@ -2594,7 +2585,11 @@ AC_HELP_STRING([--without-ca-bundle], [Don't use a default CA bundle]),
   ],
   [ want_ca="unset" ])
   AC_ARG_WITH(ca-path,
-AC_HELP_STRING([--with-ca-path=DIRECTORY], [Directory to use as CA path])
+AC_HELP_STRING([--with-ca-path=DIRECTORY],
+[Path to a directory containing CA certificates stored individually, with \
+their filenames in a hash format. This option can be used with OpenSSL, \
+GnuTLS and PolarSSL backends. Refer to OpenSSL c_rehash for details. \
+(example: /etc/certificates)])
 AC_HELP_STRING([--without-ca-path], [Don't use a default CA path]),
   [
     want_capath="$withval"
@@ -2604,18 +2599,23 @@ AC_HELP_STRING([--without-ca-path], [Don't use a default CA path]),
   ],
   [ want_capath="unset"])
 
+  ca_warning="   (warning: certs not found)"
+  capath_warning="   (warning: certs not found)"
+  check_capath=""
+
   if test "x$want_ca" != "xno" -a "x$want_ca" != "xunset" -a \
           "x$want_capath" != "xno" -a "x$want_capath" != "xunset"; then
     dnl both given
-    AC_MSG_ERROR([Can't specify both --with-ca-bundle and --with-ca-path.])
+    ca="$want_ca"
+    capath="$want_capath"
   elif test "x$want_ca" != "xno" -a "x$want_ca" != "xunset"; then
     dnl --with-ca-bundle given
     ca="$want_ca"
     capath="no"
   elif test "x$want_capath" != "xno" -a "x$want_capath" != "xunset"; then
     dnl --with-ca-path given
-    if test "x$OPENSSL_ENABLED" != "x1" -a "x$POLARSSL_ENABLED" != "x1"; then
-      AC_MSG_ERROR([--with-ca-path only works with openSSL or PolarSSL])
+    if test "x$OPENSSL_ENABLED" != "x1" -a "x$GNUTLS_ENABLED" != "x1" -a "x$POLARSSL_ENABLED" != "x1"; then
+      AC_MSG_ERROR([--with-ca-path only works with OpenSSL, GnuTLS or PolarSSL])
     fi
     capath="$want_capath"
     ca="no"
@@ -2651,12 +2651,7 @@ AC_HELP_STRING([--without-ca-path], [Don't use a default CA path]),
       fi
       if test "x$want_capath" = "xunset" -a "x$ca" = "xno" -a \
               "x$OPENSSL_ENABLED" = "x1"; then
-        for a in /etc/ssl/certs/; do
-          if test -d "$a" && ls "$a"/[[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]].0 >/dev/null 2>/dev/null; then
-            capath="$a"
-            break
-          fi
-        done
+        check_capath="/etc/ssl/certs/"
       fi
     else
       dnl no option given and cross-compiling
@@ -2664,17 +2659,61 @@ AC_HELP_STRING([--without-ca-path], [Don't use a default CA path]),
     fi
   fi
 
+  if test "x$ca" = "xno" || test -f "$ca"; then
+    ca_warning=""
+  fi
+
+  if test "x$capath" != "xno"; then
+    check_capath="$capath"
+  fi
+
+  if test ! -z "$check_capath"; then
+    for a in "$check_capath"; do
+      if test -d "$a" && ls "$a"/[[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]].0 >/dev/null 2>/dev/null; then
+        if test "x$capath" = "xno"; then
+          capath="$a"
+        fi
+        capath_warning=""
+        break
+      fi
+    done
+  fi
+
+  if test "x$capath" = "xno"; then
+    capath_warning=""
+  fi
+
   if test "x$ca" != "xno"; then
     CURL_CA_BUNDLE='"'$ca'"'
     AC_DEFINE_UNQUOTED(CURL_CA_BUNDLE, "$ca", [Location of default ca bundle])
     AC_SUBST(CURL_CA_BUNDLE)
     AC_MSG_RESULT([$ca])
-  elif test "x$capath" != "xno"; then
+  fi
+  if test "x$capath" != "xno"; then
     CURL_CA_PATH="\"$capath\""
     AC_DEFINE_UNQUOTED(CURL_CA_PATH, "$capath", [Location of default ca path])
     AC_MSG_RESULT([$capath (capath)])
-  else
+  fi
+  if test "x$ca" = "xno" && test "x$capath" = "xno"; then
     AC_MSG_RESULT([no])
+  fi
+
+  AC_MSG_CHECKING([whether to use builtin CA store of SSL library])
+  AC_ARG_WITH(ca-fallback,
+AC_HELP_STRING([--with-ca-fallback], [Use the built in CA store of the SSL library])
+AC_HELP_STRING([--without-ca-fallback], [Don't use the built in CA store of the SSL library]),
+  [
+    if test "x$with_ca_fallback" != "xyes" -a "x$with_ca_fallback" != "xno"; then
+      AC_MSG_ERROR([--with-ca-fallback only allows yes or no as parameter])
+    fi
+  ],
+  [ with_ca_fallback="no"])
+  AC_MSG_RESULT([$with_ca_fallback])
+  if test "x$with_ca_fallback" = "xyes"; then
+    if test "x$OPENSSL_ENABLED" != "x1" -a "x$GNUTLS_ENABLED" != "x1"; then
+      AC_MSG_ERROR([--with-ca-fallback only works with OpenSSL or GnuTLS])
+    fi
+    AC_DEFINE_UNQUOTED(CURL_CA_FALLBACK, 1, [define "1" to use built in CA store of SSL library ])
   fi
 ])
 
@@ -2848,7 +2887,6 @@ AC_DEFUN([CURL_CONFIGURE_CURL_OFF_T], [
   #
   x_LP64_long=""
   x_LP32_long=""
-  x_LP16_long=""
   #
   if test "$ac_cv_sizeof_long" -eq "8" &&
      test "$ac_cv_sizeof_voidp" -ge "8"; then
@@ -2856,9 +2894,6 @@ AC_DEFUN([CURL_CONFIGURE_CURL_OFF_T], [
   elif test "$ac_cv_sizeof_long" -eq "4" &&
        test "$ac_cv_sizeof_voidp" -ge "4"; then
     x_LP32_long="long"
-  elif test "$ac_cv_sizeof_long" -eq "2" &&
-       test "$ac_cv_sizeof_voidp" -ge "2"; then
-    x_LP16_long="long"
   fi
   #
   dnl DO_CURL_OFF_T_CHECK results are stored in next 3 vars
@@ -2889,17 +2924,6 @@ AC_DEFUN([CURL_CONFIGURE_CURL_OFF_T], [
       '__int32'        \
       'int'            ; do
       DO_CURL_OFF_T_CHECK([$t4], [4])
-    done
-    AC_MSG_RESULT([$curl_typeof_curl_off_t])
-  fi
-  if test "$curl_typeof_curl_off_t" = "unknown"; then
-    AC_MSG_CHECKING([for 16-bit curl_off_t data type])
-    for t2 in          \
-      "$x_LP16_long"   \
-      'int16_t'        \
-      '__int16'        \
-      'int'            ; do
-      DO_CURL_OFF_T_CHECK([$t2], [2])
     done
     AC_MSG_RESULT([$curl_typeof_curl_off_t])
   fi
@@ -3063,12 +3087,14 @@ dnl Optionally PKG_CONFIG_LIBDIR may be given as $pcdir.
 dnl
 
 AC_DEFUN([CURL_CHECK_PKGCONFIG], [
+    if test -n "$PKG_CONFIG"; then
+      PKGCONFIG="$PKG_CONFIG"
+    else
+      AC_PATH_TOOL([PKGCONFIG], [pkg-config], [no],
+        [$PATH:/usr/bin:/usr/local/bin])
+    fi
 
-    PKGCONFIG="no"
-
-    AC_PATH_TOOL( PKGCONFIG, pkg-config, no, $PATH:/usr/bin:/usr/local/bin)
-
-    if test x$PKGCONFIG != xno; then
+    if test "x$PKGCONFIG" != "xno"; then
       AC_MSG_CHECKING([for $1 options with pkg-config])
       dnl ask pkg-config about $1
       itexists=`CURL_EXPORT_PCDIR([$2]) dnl
@@ -3124,4 +3150,49 @@ use vars qw(
 
 1;
 _EOF
+])
+
+dnl CURL_CPP_P
+dnl
+dnl Check if $cpp -P should be used for extract define values due to gcc 5
+dnl splitting up strings and defines between line outputs. gcc by default
+dnl (without -P) will show TEST EINVAL TEST as
+dnl
+dnl # 13 "conftest.c"
+dnl TEST
+dnl # 13 "conftest.c" 3 4
+dnl     22
+dnl # 13 "conftest.c"
+dnl            TEST
+
+AC_DEFUN([CURL_CPP_P], [
+  AC_MSG_CHECKING([if cpp -P is needed])
+  AC_EGREP_CPP([TEST.*TEST], [
+ #include <errno.h>
+TEST EINVAL TEST
+  ], [cpp=no], [cpp=yes])
+  AC_MSG_RESULT([$cpp])
+
+  dnl we need cpp -P so check if it works then
+  if test "x$cpp" = "xyes"; then
+    AC_MSG_CHECKING([if cpp -P works])
+    OLDCPPFLAGS=$CPPFLAGS
+    CPPFLAGS="$CPPFLAGS -P"
+    AC_EGREP_CPP([TEST.*TEST], [
+ #include <errno.h>
+TEST EINVAL TEST
+    ], [cpp_p=yes], [cpp_p=no])
+    AC_MSG_RESULT([$cpp_p])
+
+    if test "x$cpp_p" = "xno"; then
+      AC_MSG_WARN([failed to figure out cpp -P alternative])
+      # without -P
+      CPPPFLAGS=$OLDCPPFLAGS
+    else
+      # with -P
+      CPPPFLAGS=$CPPFLAGS
+    fi
+    dnl restore CPPFLAGS
+    CPPFLAGS=$OLDCPPFLAGS
+  fi
 ])

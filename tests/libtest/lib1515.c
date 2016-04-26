@@ -9,7 +9,7 @@
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at http://curl.haxx.se/docs/copyright.html.
+ * are also available at https://curl.haxx.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -38,9 +38,6 @@
 #if defined(WIN32) || defined(_WIN32)
 #define sleep(s) Sleep(s * 1000)
 #endif
-
-#define _MPRINTF_REPLACE
-#include <curl/mprintf.h>
 
 static int debug_callback(CURL *curl, curl_infotype info, char *msg, size_t len, void *ptr)
 {
@@ -133,7 +130,7 @@ int test(char *URL)
 
   for(i = 1; i <= count; i++) {
     char target_url[256];
-    snprintf(target_url, sizeof(target_url), "http://testserver.example.com:%s%s%04d", port, path, i);
+    snprintf(target_url, sizeof(target_url), "http://testserver.example.com:%s/%s%04d", port, path, i);
 
     /* second request must succeed like the first one */
     if((res = do_one_request(multi, target_url, dns_entry)))
