@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2012 - 2015, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2016, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
  *
  * This software is licensed as described in the file COPYING, which
@@ -344,13 +344,12 @@ polarssl_connect_step1(struct connectdata *conn,
   ssl_set_own_cert_rsa(&connssl->ssl,
                        &connssl->clicert, &connssl->rsa);
 
-  if(!Curl_inet_pton(AF_INET, conn->host.name, &addr) &&
-#ifdef ENABLE_IPV6
-     !Curl_inet_pton(AF_INET6, conn->host.name, &addr) &&
-#endif
-     sni && ssl_set_hostname(&connssl->ssl, conn->host.name)) {
-     infof(data, "WARNING: failed to configure "
-                 "server name indication (SNI) TLS extension\n");
+  if(ssl_set_hostname(&connssl->ssl, conn->host.name)) {
+    /* ssl_set_hostname() sets the name to use in CN/SAN checks *and* the name
+       to set in the SNI extension. So even if curl connects to a host
+       specified as an IP address, this function must be used. */
+    failf(data, "couldn't set hostname in PolarSSL");
+    return CURLE_SSL_CONNECT_ERROR;
   }
 
 #ifdef HAS_ALPN
