@@ -620,6 +620,7 @@ X_OBJS= \
 	$(DIROBJ)\speedcheck.obj \
 	$(DIROBJ)\splay.obj \
 	$(DIROBJ)\ssh.obj \
+	$(DIROBJ)\system_win32.obj \
 	$(DIROBJ)\vtls.obj \
 	$(DIROBJ)\openssl.obj \
 	$(DIROBJ)\strdup.obj \
